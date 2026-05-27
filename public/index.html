@@ -1,34 +1,4 @@
-import { Hono } from 'hono'
-import { cors } from 'hono/cors'
-import auth from './routes/auth'
-import posts from './routes/posts'
-import messages from './routes/messages'
-import admin from './routes/admin'
-import questions from './routes/questions'
-
-type Bindings = { DB: D1Database }
-
-const app = new Hono<{ Bindings: Bindings }>()
-
-app.use('/api/*', cors({ origin: '*', credentials: true }))
-
-// API routes
-app.route('/api/auth', auth)
-app.route('/api/posts', posts)
-app.route('/api/messages', messages)
-app.route('/api/admin', admin)
-app.route('/api/questions', questions)
-
-// SPA fallback - 全リクエストでindex.htmlを返す
-app.get('*', async (c) => {
-  const url = new URL(c.req.url)
-  // APIリクエストはここに到達しないはずだが念のため
-  if (url.pathname.startsWith('/api/')) {
-    return c.json({ error: 'Not found' }, 404)
-  }
-  
-  // index.htmlの内容を直接返す
-  return c.html(`<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
@@ -121,8 +91,8 @@ app.get('*', async (c) => {
   <div id="info-bar" class="flex-none">
     <div id="disaster-bar" class="bg-orange-500 text-white text-xs py-1 px-3 flex items-center gap-2 overflow-hidden">
       <i class="fas fa-shield-alt flex-none"></i>
-      <div class="overflow-hidden whitespace-nowrap">
-        <span id="disaster-text">入間市防災情報を読み込み中...</span>
+      <div class="overflow-hidden">
+        <span id="disaster-text" class="whitespace-nowrap inline-block">入間市防災情報を読み込み中...</span>
       </div>
     </div>
     <div id="wbgt-bar" class="bg-blue-600 text-white text-xs py-1 px-3 flex items-center gap-4">
@@ -159,12 +129,17 @@ app.get('*', async (c) => {
 
   <!-- コンテンツエリア -->
   <main class="flex-1 overflow-hidden flex flex-col">
-    <div id="tab-content" class="flex-1 overflow-y-auto"></div>
+    <!-- タブコンテンツ -->
+    <div id="tab-content" class="flex-1 overflow-y-auto">
+      <!-- 各タブのコンテンツがここに表示される -->
+    </div>
   </main>
 
   <!-- ボトムナビゲーション -->
   <nav id="bottom-nav" class="flex-none bg-white border-t border-gray-200 shadow-lg z-30">
-    <div id="nav-tabs" class="flex justify-around items-center py-1"></div>
+    <div id="nav-tabs" class="flex justify-around items-center py-1">
+      <!-- 動的に生成 -->
+    </div>
   </nav>
 </div>
 
@@ -197,7 +172,4 @@ app.get('*', async (c) => {
 
 <script src="/static/app.js"></script>
 </body>
-</html>`)
-})
-
-export default app
+</html>

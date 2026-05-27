@@ -1,12 +1,19 @@
 {
-  "name": "webapp",
+  "name": "jochu-kokuban",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:sandbox": "wrangler pages dev dist --ip 0.0.0.0 --port 3000",
+    "dev:d1": "wrangler pages dev dist --d1=jochu-kokuban-production --local --ip 0.0.0.0 --port 3000",
     "build": "vite build",
-    "preview": "wrangler pages dev",
-    "deploy": "npm run build && wrangler pages deploy",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+    "preview": "wrangler pages dev dist",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name jochu-kokuban",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "db:create": "wrangler d1 create jochu-kokuban-production",
+    "db:migrate:local": "wrangler d1 migrations apply jochu-kokuban-production --local",
+    "db:migrate:prod": "wrangler d1 migrations apply jochu-kokuban-production",
+    "db:seed:local": "wrangler d1 execute jochu-kokuban-production --local --file=./seed.sql",
+    "db:reset": "rm -rf .wrangler/state/v3/d1 && npm run db:migrate:local && npm run db:seed:local"
   },
   "dependencies": {
     "hono": "^4.12.12"
