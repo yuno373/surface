@@ -158,11 +158,9 @@ auth.post('/setup', async (c) => {
 })
 
 auth.all('/debug-env', async (c) => {
-  const required = ['CF_ACCOUNT_ID', 'CF_D1_DATABASE_ID', 'CF_API_TOKEN', 'CF_R2_ACCESS_KEY_ID', 'CF_R2_SECRET_ACCESS_KEY', 'CF_R2_BUCKET']
-  const status: any = {}
-  for (const key of required) status[key] = process.env[key] ? 'SET' : 'MISSING'
-  status.DB_OBJECT = c.env.DB ? 'EXISTS' : 'NULL'
-  return c.json(status)
+  const allKeys = Object.keys(process.env).sort()
+  const filtered = allKeys.filter(k => k.includes('CF_') || k.includes('R2_') || k.includes('JWT') || k.includes('VAPID') || k.includes('PORT'))
+  return c.json({ filtered, count: allKeys.length, sample: allKeys.slice(0, 20) })
 })
 
 auth.post('/init', async (c) => {
