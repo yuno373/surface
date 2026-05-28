@@ -338,6 +338,31 @@ admin.get('/posts', async (c) => {
   return c.json({ posts: allPosts.results })
 })
 
+// 投稿一括削除
+admin.post('/posts/bulk-delete', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
+  const { ids } = await c.req.json()
+  if (!ids || !ids.length) return c.json({ error: 'No ids' }, 400)
+  const placeholders = ids.map(() => '?').join(',')
+  await c.env.DB.prepare(`DELETE FROM posts WHERE id IN (${placeholders})`).bind(...ids).run()
+  return c.json({ success: true, deleted: ids.length })
+})
+
+// パスワード変更（管理者がユーザーのパスワード変更）
+admin.post('/users/:id/change-password', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isAdmin(roles)) return c.json({ error: 'Forbidden（管理者のみ）' }, 403)
+  const targetId = parseInt(c.req.param('id'))
+  const { password } = await c.req.json()
+  if (!password) return c.json({ error: 'パスワードが必要です' }, 400)
+  const hash = await hashPassword(password)
+  await c.env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(hash, targetId).run()
+  return c.json({ success: true })
+})
+
 // 通知設定取得
 admin.get('/notifications/settings', async (c) => {
   const user = await getUser(c)
@@ -397,6 +422,16 @@ admin.post('/notifications/broadcast', async (c) => {
   }
 
   return c.json({ success: true, sent: allUsers.results.length })
+})
+
+// 自分通知一覧
+admin.get('/notifications/self', async (c) => {
+  const user = await getUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const notifs = await c.env.DB.prepare(
+    "SELECT * FROM notifications WHERE user_id = ? AND type = 'self' ORDER BY scheduled_at ASC, created_at DESC"
+  ).bind(user.id).all<any>()
+  return c.json({ notifications: notifs.results })
 })
 
 // 自分通知
@@ -521,6 +556,36 @@ admin.get('/roles', async (c) => {
   `).all<any>()
 
   return c.json({ roles: allRoles.results })
+})
+
+// 管理設定取得
+admin.get('/settings', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isAdmin(roles)) return c.json({ error: 'Forbidden' }, 403)
+
+  const settings = await c.env.DB.prepare('SELECT key, value FROM admin_settings').all<any>()
+  const result: Record<string, string> = {}
+  for (const s of settings.results || []) {
+    result[s.key] = s.value
+  }
+  return c.json({ settings: result })
+})
+
+// 管理設定更新
+admin.put('/settings', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isAdmin(roles)) return c.json({ error: 'Forbidden' }, 403)
+  const { settings } = await c.req.json()
+  if (!settings || typeof settings !== 'object') return c.json({ error: 'Invalid' }, 400)
+
+  for (const [key, value] of Object.entries(settings)) {
+    await c.env.DB.prepare(
+      'INSERT INTO admin_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+    ).bind(key, String(value)).run()
+  }
+  return c.json({ success: true })
 })
 
 export default admin

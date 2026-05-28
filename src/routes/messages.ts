@@ -161,6 +161,24 @@ messages.post('/threads', async (c) => {
   return c.json({ success: true, thread_id: threadId, existing: false })
 })
 
+// スレッド詳細（メンバー含む）
+messages.get('/threads/:id', async (c) => {
+  const user = await getUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const threadId = parseInt(c.req.param('id'))
+
+  const thread = await c.env.DB.prepare(
+    'SELECT mt.*, tm.user_id FROM message_threads mt JOIN thread_members tm ON mt.id = tm.thread_id WHERE mt.id = ? AND tm.user_id = ? AND mt.deleted_at IS NULL'
+  ).bind(threadId, user.id).first<any>()
+  if (!thread) return c.json({ error: 'Not found' }, 404)
+
+  const members = await c.env.DB.prepare(
+    'SELECT u.id, u.name, u.role FROM users u JOIN thread_members tm ON u.id = tm.user_id WHERE tm.thread_id = ?'
+  ).bind(threadId).all<any>()
+
+  return c.json({ thread: { ...thread, members: members.results } })
+})
+
 // スレッドピン留め
 messages.post('/threads/:id/pin', async (c) => {
   const user = await getUser(c)
