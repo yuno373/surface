@@ -17,16 +17,16 @@ class D1Statement {
   constructor(sql: string) { this.sql = sql; this.params = [] }
   bind(...args: any[]) { this.params = args.map(p => p === undefined ? null : p); return this }
   async all<T = any>(): Promise<{ results: T[] }> {
-    const res = await query(this.sql, this.params)
-    return { results: (res as any[]) || [] }
+    const res: any = await query(this.sql, this.params)
+    return { results: res?.results || [] }
   }
   async first<T = any>(): Promise<T | null> {
-    const res = await query(this.sql, this.params)
-    return (res as any[])?.[0] || null
+    const res: any = await query(this.sql, this.params)
+    return res?.results?.[0] || null
   }
   async run(): Promise<{ success: boolean; meta: { last_row_id: number; changes: number } }> {
-    const res = await query(this.sql, this.params)
-    const meta = (res as any)?.meta || {}
+    const res: any = await query(this.sql, this.params)
+    const meta = res?.meta || {}
     return { success: true, meta: { last_row_id: meta.last_row_id || 0, changes: meta.changes || 0 } }
   }
 }
