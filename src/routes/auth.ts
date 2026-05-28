@@ -18,14 +18,10 @@ async function verifyPassword(password: string, hash: string): Promise<boolean> 
   return computed === hash
 }
 
-function generateSessionId(): string {
-  return crypto.randomUUID()
-}
+function generateSessionId(): string { return crypto.randomUUID() }
 
 async function getUserRoles(db: any, userId: number): Promise<string[]> {
-  const roles = await db.prepare(
-    'SELECT role FROM user_roles WHERE user_id = ?'
-  ).bind(userId).all<any>()
+  const roles = await db.prepare('SELECT role FROM user_roles WHERE user_id = ?').bind(userId).all<any>()
   return roles.results.map(r => r.role)
 }
 
@@ -39,6 +35,21 @@ async function enrichUser(db: any, user: any): Promise<any> {
     is_admin: roles.includes('admin'),
     is_teacher: roles.includes('teacher'),
   }
+}
+
+async function ensureTable(db: any) {
+  await db.prepare(`CREATE TABLE IF NOT EXISTS profile_change_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    field_name TEXT NOT NULL,
+    old_value TEXT,
+    new_value TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    reviewed_by INTEGER,
+    reviewed_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )`).run()
 }
 
 auth.post('/login', async (c) => {
@@ -99,19 +110,77 @@ auth.put('/profile', async (c) => {
   ).bind(sessionId).first<any>()
   if (!session) return c.json({ error: 'Session expired' }, 401)
 
+  const roles = await getUserRoles(c.env.DB, session.user_id)
+  const isStaff = roles.some((r: string) => ['admin', 'teacher'].includes(r))
   const body = await c.req.json()
-  const allowedFields = ['name', 'bio', 'club', 'committee', 'avatar_url'] as const
-  const updates: string[] = []
-  const params: any[] = []
-  for (const field of allowedFields) {
-    if (body[field] !== undefined) {
-      updates.push(`${field} = ?`)
-      params.push(body[field])
+
+  // 管理者/先生は直接更新可
+  if (isStaff) {
+    const allowedFields = ['name', 'bio', 'club', 'committee', 'avatar_url'] as const
+    const updates: string[] = []
+    const params: any[] = []
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        updates.push(`${field} = ?`)
+        params.push(body[field])
+      }
+    }
+    if (updates.length === 0) return c.json({ error: 'No valid fields' }, 400)
+    params.push(session.user_id)
+    await c.env.DB.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run()
+    return c.json({ success: true, direct: true })
+  }
+
+  // 生徒は承認制
+  await ensureTable(c.env.DB)
+  const user = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(session.user_id).first<any>()
+  if (!user) return c.json({ error: 'User not found' }, 404)
+
+  const needApprovalFields = ['name', 'grade', 'class_num', 'number', 'club', 'committee'] as const
+  let hasPending = false
+  for (const field of needApprovalFields) {
+    if (body[field] !== undefined && String(body[field]) !== String(user[field] || '')) {
+      // 同じフィールドのpendingリクエストが既にあるか確認
+      const existing = await c.env.DB.prepare(
+        "SELECT id FROM profile_change_requests WHERE user_id = ? AND field_name = ? AND status = 'pending'"
+      ).bind(session.user_id, field).first()
+      if (existing) continue // 既存のpendingを更新（削除して再作成）
+      await c.env.DB.prepare(
+        'INSERT INTO profile_change_requests (user_id, field_name, old_value, new_value) VALUES (?, ?, ?, ?)'
+      ).bind(session.user_id, field, String(user[field] || ''), String(body[field])).run()
+      hasPending = true
     }
   }
-  if (updates.length === 0) return c.json({ error: 'No valid fields' }, 400)
-  params.push(session.user_id)
-  await c.env.DB.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run()
+  // bioとavatar_urlは生徒も直接更新可
+  if (body.bio !== undefined) {
+    await c.env.DB.prepare('UPDATE users SET bio = ? WHERE id = ?').bind(body.bio, session.user_id).run()
+  }
+  if (body.avatar_url !== undefined) {
+    await c.env.DB.prepare('UPDATE users SET avatar_url = ? WHERE id = ?').bind(body.avatar_url, session.user_id).run()
+  }
+
+  return c.json({ success: true, pending: hasPending })
+})
+
+// パスワード変更（自分）
+auth.post('/password', async (c) => {
+  const sessionId = getCookie(c, 'session')
+  if (!sessionId) return c.json({ error: 'Not authenticated' }, 401)
+  const session = await c.env.DB.prepare(
+    'SELECT * FROM sessions WHERE id = ? AND expires_at > datetime("now")'
+  ).bind(sessionId).first<any>()
+  if (!session) return c.json({ error: 'Session expired' }, 401)
+
+  const { current_password, new_password } = await c.req.json()
+  if (!current_password || !new_password) return c.json({ error: '現在のパスワードと新しいパスワードが必要です' }, 400)
+  if (new_password.length < 4) return c.json({ error: 'パスワードは4文字以上' }, 400)
+
+  const user = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(session.user_id).first<any>()
+  const valid = await verifyPassword(current_password, user.password_hash)
+  if (!valid) return c.json({ error: '現在のパスワードが違います' }, 401)
+
+  const hash = await hashPassword(new_password)
+  await c.env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(hash, session.user_id).run()
   return c.json({ success: true })
 })
 

@@ -614,4 +614,61 @@ admin.get('/diagnostics', async (c) => {
   return c.json({ tables: tableStatus, env: { cf_account: !!process.env?.CF_ACCOUNT_ID, r2_bucket: !!process.env?.CF_R2_BUCKET } })
 })
 
+// プロフィール変更リクエスト一覧
+admin.get('/profile-changes', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
+
+  await c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS profile_change_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    field_name TEXT NOT NULL,
+    old_value TEXT, new_value TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    reviewed_by INTEGER, reviewed_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )`).run()
+
+  const pending = await c.env.DB.prepare(
+    `SELECT p.*, u.name as user_name, u.grade, u.class_num, u.number
+     FROM profile_change_requests p JOIN users u ON p.user_id = u.id
+     WHERE p.status = 'pending' ORDER BY p.created_at DESC`
+  ).all<any>()
+  return c.json({ requests: pending.results })
+})
+
+// プロフィール変更リクエスト承認
+admin.post('/profile-changes/:id/approve', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
+  const id = parseInt(c.req.param('id'))
+
+  const req = await c.env.DB.prepare("SELECT * FROM profile_change_requests WHERE id = ? AND status = 'pending'").bind(id).first<any>()
+  if (!req) return c.json({ error: 'Not found or already processed' }, 404)
+
+  await c.env.DB.prepare(`UPDATE users SET ${req.field_name} = ? WHERE id = ?`).bind(req.new_value, req.user_id).run()
+  await c.env.DB.prepare(
+    'UPDATE profile_change_requests SET status = ?, reviewed_by = ?, reviewed_at = datetime("now") WHERE id = ?'
+  ).bind('approved', user.id, id).run()
+
+  return c.json({ success: true })
+})
+
+// プロフィール変更リクエスト却下
+admin.post('/profile-changes/:id/reject', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
+  const id = parseInt(c.req.param('id'))
+
+  await c.env.DB.prepare(
+    "UPDATE profile_change_requests SET status = 'rejected', reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ? AND status = 'pending'"
+  ).bind(user.id, id).run()
+
+  return c.json({ success: true })
+})
+
 export default admin
