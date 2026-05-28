@@ -182,14 +182,20 @@ const indexHtml = `<!DOCTYPE html>
 </div>
 
 <div id="app" class="hidden flex flex-col h-screen max-h-screen overflow-hidden">
-  <div id="info-bar" class="flex-none">
-    <div id="disaster-bar" class="bg-orange-500 text-white text-xs py-1 px-3 flex items-center gap-2 overflow-hidden">
-      <i class="fas fa-shield-alt flex-none"></i>
-      <div class="overflow-hidden whitespace-nowrap flex-1">
-        <span id="info-bar-text" class="animate-marquee inline-block">気象情報・防災情報を読み込み中...</span>
-      </div>
+<div id="info-bar" class="flex-none">
+  <div id="disaster-bar" class="bg-orange-500 text-white text-xs py-1 px-3 flex items-center gap-2 overflow-hidden hidden">
+    <i class="fas fa-shield-alt flex-none"></i>
+    <div class="overflow-hidden whitespace-nowrap flex-1">
+      <span id="disaster-text" class="inline-block"></span>
     </div>
   </div>
+  <div id="wbgt-bar" class="bg-teal-600 text-white text-xs py-1 px-3 flex items-center gap-2 overflow-hidden">
+    <i class="fas fa-thermometer-half flex-none"></i>
+    <div class="overflow-hidden whitespace-nowrap flex-1">
+      <span id="wbgt-text">気象情報を取得中...</span>
+    </div>
+  </div>
+</div>
   <header class="bg-gradient-to-r from-teal-800 to-green-700 text-white px-4 py-2.5 flex items-center gap-3 flex-none shadow-md">
     <div class="flex items-center gap-2 flex-1 min-w-0">
       <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-lg flex-none">
