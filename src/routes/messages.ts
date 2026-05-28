@@ -4,6 +4,40 @@ import { getCookie } from 'hono/cookie'
 type Bindings = { DB: any }
 const messages = new Hono<{ Bindings: Bindings }>()
 
+async function ensureTables(db: any) {
+  await db.prepare(`CREATE TABLE IF NOT EXISTS message_threads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    type TEXT NOT NULL DEFAULT 'direct',
+    created_by INTEGER NOT NULL,
+    is_pinned INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at DATETIME
+  )`).run()
+  await db.prepare(`CREATE TABLE IF NOT EXISTS thread_members (
+    thread_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (thread_id, user_id)
+  )`).run()
+  await db.prepare(`CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL,
+    sender_id INTEGER NOT NULL,
+    content TEXT DEFAULT '',
+    file_url TEXT,
+    file_type TEXT,
+    is_deleted INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`).run()
+  await db.prepare(`CREATE TABLE IF NOT EXISTS message_reads (
+    message_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    read_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (message_id, user_id)
+  )`).run()
+}
+
 async function getUser(c: any) {
   const sessionId = getCookie(c, 'session')
   if (!sessionId) return null
@@ -21,6 +55,7 @@ async function getUserRoles(db: any, userId: number): Promise<string[]> {
 
 // スレッド一覧
 messages.get('/threads', async (c) => {
+  await ensureTables(c.env.DB)
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
@@ -347,6 +382,19 @@ messages.get('/users', async (c) => {
 
   const users = await c.env.DB.prepare(query).bind(...params).all<any>()
   return c.json({ users: users.results })
+})
+
+// メンバー削除（個別）
+messages.delete('/threads/:threadId/members/:userId', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  const isStaff = roles.some((r: string) => ['admin', 'teacher'].includes(r))
+  if (!user || !isStaff) return c.json({ error: 'Forbidden' }, 403)
+  const threadId = parseInt(c.req.param('threadId'))
+  const userId = parseInt(c.req.param('userId'))
+  await c.env.DB.prepare('DELETE FROM thread_members WHERE thread_id = ? AND user_id = ?')
+    .bind(threadId, userId).run()
+  return c.json({ success: true })
 })
 
 export default messages
