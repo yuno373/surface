@@ -1,15 +1,15 @@
-import build from '@hono/vite-build/cloudflare-pages'
-import devServer from '@hono/vite-dev-server'
-import adapter from '@hono/vite-dev-server/cloudflare'
 import { defineConfig } from 'vite'
 import { copyFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'fs'
 import { join, relative } from 'path'
 
-// public フォルダをdistにコピーするプラグイン
 function copyPublicPlugin() {
   return {
     name: 'copy-public',
     closeBundle() {
+      const root = process.cwd()
+      const srcDir = join(root, 'public')
+      const destDir = join(root, 'dist')
+      if (!existsSync(srcDir)) { console.log('public/ not found, skipping copy'); return }
       function copyDir(src: string, dest: string) {
         if (!existsSync(dest)) mkdirSync(dest, { recursive: true })
         for (const item of readdirSync(src)) {
@@ -22,20 +22,21 @@ function copyPublicPlugin() {
           }
         }
       }
-      copyDir('public', 'dist')
+      copyDir(srcDir, destDir)
     }
   }
 }
 
 export default defineConfig({
-  plugins: [
-    build({
-      entry: 'src/index.tsx',
-    }),
-    copyPublicPlugin(),
-    devServer({
-      adapter,
-      entry: 'src/index.tsx'
-    })
-  ]
+  plugins: [copyPublicPlugin()],
+  build: {
+    ssr: 'src/server.ts',
+    outDir: 'dist',
+    rollupOptions: {
+      external: ['@aws-sdk/client-s3']
+    }
+  },
+  ssr: {
+    external: ['@aws-sdk/client-s3']
+  }
 })

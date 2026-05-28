@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { getCookie } from 'hono/cookie'
 
-type Bindings = { DB: D1Database }
+type Bindings = { DB: any }
 const admin = new Hono<{ Bindings: Bindings }>()
 
 async function getUser(c: any) {
@@ -14,6 +14,11 @@ async function getUser(c: any) {
   return await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(session.user_id).first<any>()
 }
 
+async function getUserRoles(db: any, userId: number): Promise<string[]> {
+  const roles = await db.prepare('SELECT role FROM user_roles WHERE user_id = ?').bind(userId).all<any>()
+  return roles.results.map(r => r.role)
+}
+
 async function hashPassword(password: string): Promise<string> {
   const encoder = new TextEncoder()
   const data = encoder.encode(password + 'jochu_salt_2024')
@@ -21,44 +26,53 @@ async function hashPassword(password: string): Promise<string> {
   return btoa(String.fromCharCode(...new Uint8Array(hash)))
 }
 
+function isStaff(roles: string[]): boolean {
+  return roles.some((r: string) => ['admin', 'teacher'].includes(r))
+}
+
+function isAdmin(roles: string[]): boolean {
+  return roles.includes('admin')
+}
+
 // ユーザー一覧
 admin.get('/users', async (c) => {
   const user = await getUser(c)
-  if (!user || !['admin', 'teacher'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
 
   const users = await c.env.DB.prepare(
-    'SELECT id, username, role, name, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, avatar_url, first_login, created_at FROM users ORDER BY role, grade, class_num, number'
+    `SELECT u.id, u.username, u.login_id, u.role, u.name, u.grade, u.class_num, u.number, u.club, u.committee, u.subject, 
+     u.is_homeroom, u.homeroom_class, u.avatar_url, u.first_login, u.created_at,
+     (SELECT GROUP_CONCAT(role) FROM user_roles WHERE user_id = u.id) as all_roles
+     FROM users u ORDER BY u.role, u.grade, u.class_num, u.number`
   ).all<any>()
 
   return c.json({ users: users.results })
 })
 
-// ユーザー更新（先生は管理者のアカウント変更不可）
+// ユーザー更新
 admin.put('/users/:id', async (c) => {
   const user = await getUser(c)
-  if (!user || !['admin', 'teacher'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403)
+  const myRoles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(myRoles)) return c.json({ error: 'Forbidden' }, 403)
 
   const targetId = parseInt(c.req.param('id'))
   const target = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(targetId).first<any>()
   if (!target) return c.json({ error: 'User not found' }, 404)
 
-  // 先生は管理者アカウントの変更不可
-  if (user.role === 'teacher' && target.role === 'admin') {
+  const targetRoles = await getUserRoles(c.env.DB, targetId)
+
+  if (!isAdmin(myRoles) && targetRoles.includes('admin')) {
     return c.json({ error: '管理者アカウントは変更できません' }, 403)
   }
-  // 先生は先生の権限をadminには変更不可
-  const body = await c.req.json()
-  if (user.role === 'teacher' && body.role === 'admin') {
-    return c.json({ error: '管理者権限は付与できません' }, 403)
-  }
 
-  const { name, role, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, password } = body
+  const body = await c.req.json()
+  const { name, role, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, password, login_id, roles: newRoles } = body
 
   let fields: string[] = ['updated_at = datetime("now")']
   let params: any[] = []
 
   if (name !== undefined) { fields.push('name = ?'); params.push(name) }
-  if (role !== undefined) { fields.push('role = ?'); params.push(role) }
   if (grade !== undefined) { fields.push('grade = ?'); params.push(grade) }
   if (class_num !== undefined) { fields.push('class_num = ?'); params.push(class_num) }
   if (number !== undefined) { fields.push('number = ?'); params.push(number) }
@@ -67,28 +81,46 @@ admin.put('/users/:id', async (c) => {
   if (subject !== undefined) { fields.push('subject = ?'); params.push(subject) }
   if (is_homeroom !== undefined) { fields.push('is_homeroom = ?'); params.push(is_homeroom ? 1 : 0) }
   if (homeroom_class !== undefined) { fields.push('homeroom_class = ?'); params.push(homeroom_class) }
+  if (login_id !== undefined) { fields.push('login_id = ?'); params.push(login_id) }
+  if (role !== undefined && !isAdmin(myRoles) && role === 'admin') {
+    return c.json({ error: '管理者権限は付与できません' }, 403)
+  }
+  if (role !== undefined) { fields.push('role = ?'); params.push(role) }
   if (password) {
     const hash = await hashPassword(password)
     fields.push('password_hash = ?')
     params.push(hash)
   }
 
-  params.push(targetId)
-  await c.env.DB.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).bind(...params).run()
+  if (fields.length > 1) {
+    params.push(targetId)
+    await c.env.DB.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).bind(...params).run()
+  }
+
+  // 複数ロール更新
+  if (newRoles && Array.isArray(newRoles)) {
+    await c.env.DB.prepare('DELETE FROM user_roles WHERE user_id = ?').bind(targetId).run()
+    for (const r of newRoles) {
+      await c.env.DB.prepare('INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)')
+        .bind(targetId, r).run()
+    }
+  }
 
   return c.json({ success: true })
 })
 
-// ユーザー削除（先生は管理者削除不可）
+// ユーザー削除（個別）
 admin.delete('/users/:id', async (c) => {
   const user = await getUser(c)
-  if (!user || !['admin', 'teacher'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403)
+  const myRoles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(myRoles)) return c.json({ error: 'Forbidden' }, 403)
 
   const targetId = parseInt(c.req.param('id'))
   const target = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(targetId).first<any>()
   if (!target) return c.json({ error: 'User not found' }, 404)
 
-  if (user.role === 'teacher' && target.role === 'admin') {
+  const targetRoles = await getUserRoles(c.env.DB, targetId)
+  if (!isAdmin(myRoles) && targetRoles.includes('admin')) {
     return c.json({ error: '管理者アカウントは削除できません' }, 403)
   }
   if (targetId === user.id) return c.json({ error: '自分自身は削除できません' }, 400)
@@ -97,10 +129,46 @@ admin.delete('/users/:id', async (c) => {
   return c.json({ success: true })
 })
 
+// ユーザー一括削除（学年・クラス指定）
+admin.post('/users/bulk-delete', async (c) => {
+  const user = await getUser(c)
+  const myRoles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(myRoles)) return c.json({ error: 'Forbidden' }, 403)
+
+  const { grade, class_num } = await c.req.json()
+  if (!grade) return c.json({ error: '学年は必須です' }, 400)
+
+  let query = 'SELECT id, name, username FROM users WHERE grade = ?'
+  let params: any[] = [grade]
+
+  if (class_num) {
+    query += ' AND class_num = ?'
+    params.push(class_num)
+  }
+
+  const targets = await c.env.DB.prepare(query).bind(...params).all<any>()
+
+  if (targets.results.length === 0) {
+    return c.json({ error: '該当するユーザーがいません' }, 404)
+  }
+
+  // 管理者自身は削除しない
+  const toDelete = targets.results.filter((t: any) => t.id !== user.id)
+  const ids = toDelete.map((t: any) => t.id)
+
+  if (ids.length === 0) return c.json({ error: '削除できるユーザーがいません' }, 400)
+
+  const placeholders = ids.map(() => '?').join(',')
+  await c.env.DB.prepare(`DELETE FROM users WHERE id IN (${placeholders})`).bind(...ids).run()
+
+  return c.json({ success: true, deleted: ids.length, users: toDelete })
+})
+
 // 登録トークン発行
 admin.post('/tokens', async (c) => {
   const user = await getUser(c)
-  if (!user || !['admin', 'teacher'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
 
   const { role, hours, count } = await c.req.json()
   const expiresAt = new Date(Date.now() + (hours || 24) * 60 * 60 * 1000).toISOString()
@@ -122,7 +190,8 @@ admin.post('/tokens', async (c) => {
 // 一括ユーザー生成（生徒）
 admin.post('/bulk-create/students', async (c) => {
   const user = await getUser(c)
-  if (!user || !['admin', 'teacher'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
 
   const { year, class_num, count, password } = await c.req.json()
   const yearShort = String(year).slice(-2)
@@ -133,9 +202,15 @@ admin.post('/bulk-create/students', async (c) => {
   for (let num = 1; num <= count; num++) {
     const username = `${yearShort}${String(class_num).padStart(1, '0')}${String(num).padStart(2, '0')}`
     try {
-      await c.env.DB.prepare(
+      const result = await c.env.DB.prepare(
         'INSERT OR IGNORE INTO users (username, password_hash, role, grade, class_num, number) VALUES (?, ?, "student", ?, ?, ?)'
       ).bind(username, hash, Math.ceil(class_num / 10) || 1, class_num, num).run()
+
+      if (result.meta.last_row_id) {
+        await c.env.DB.prepare(
+          'INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, "student")'
+        ).bind(result.meta.last_row_id).run()
+      }
       created.push(username)
     } catch (e) {}
   }
@@ -146,14 +221,14 @@ admin.post('/bulk-create/students', async (c) => {
 // 一括ユーザー生成（先生）
 admin.post('/bulk-create/teachers', async (c) => {
   const user = await getUser(c)
-  if (!user || user.role !== 'admin') return c.json({ error: 'Forbidden（管理者のみ）' }, 403)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isAdmin(roles)) return c.json({ error: 'Forbidden（管理者のみ）' }, 403)
 
   const { count, password } = await c.req.json()
   const defaultPass = password || 'teacher1234'
   const hash = await hashPassword(defaultPass)
   const created: string[] = []
 
-  // 現在の最大先生番号を取得
   const maxTeacher = await c.env.DB.prepare(
     "SELECT username FROM users WHERE username LIKE 'T%' ORDER BY username DESC LIMIT 1"
   ).first<any>()
@@ -166,9 +241,14 @@ admin.post('/bulk-create/teachers', async (c) => {
   for (let i = 0; i < count; i++) {
     const username = `T${String(startNum + i).padStart(3, '0')}`
     try {
-      await c.env.DB.prepare(
+      const result = await c.env.DB.prepare(
         'INSERT OR IGNORE INTO users (username, password_hash, role) VALUES (?, ?, "teacher")'
       ).bind(username, hash).run()
+      if (result.meta.last_row_id) {
+        await c.env.DB.prepare(
+          'INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, "teacher")'
+        ).bind(result.meta.last_row_id).run()
+      }
       created.push(username)
     } catch (e) {}
   }
@@ -179,11 +259,12 @@ admin.post('/bulk-create/teachers', async (c) => {
 // 統計情報
 admin.get('/stats', async (c) => {
   const user = await getUser(c)
-  if (!user || !['admin', 'teacher'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
 
   const total = await c.env.DB.prepare('SELECT COUNT(*) as cnt FROM users').first<any>()
   const byRole = await c.env.DB.prepare(
-    'SELECT role, COUNT(*) as cnt FROM users GROUP BY role'
+    'SELECT role, COUNT(*) as cnt FROM user_roles GROUP BY role'
   ).all<any>()
   const byClub = await c.env.DB.prepare(
     "SELECT club, COUNT(*) as cnt FROM users WHERE club IS NOT NULL AND club != '' GROUP BY club ORDER BY cnt DESC"
@@ -207,7 +288,8 @@ admin.get('/stats', async (c) => {
 // システム診断
 admin.get('/diagnose', async (c) => {
   const user = await getUser(c)
-  if (!user || !['admin', 'teacher'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
 
   const checks: any[] = []
 
@@ -233,7 +315,7 @@ admin.get('/diagnose', async (c) => {
   ).first<any>()
   checks.push({ name: '期限切れ質問', status: 'info', message: `${expiredQuestions?.cnt || 0}件（自動削除対象）` })
 
-  // 期限切れのものを削除
+  // クリーンアップ
   await c.env.DB.prepare('DELETE FROM sessions WHERE expires_at < datetime("now")').run()
   await c.env.DB.prepare('DELETE FROM posts WHERE expires_at IS NOT NULL AND expires_at < datetime("now")').run()
   await c.env.DB.prepare('DELETE FROM questions WHERE expires_at IS NOT NULL AND expires_at < datetime("now")').run()
@@ -246,7 +328,8 @@ admin.get('/diagnose', async (c) => {
 // 投稿管理一覧
 admin.get('/posts', async (c) => {
   const user = await getUser(c)
-  if (!user || !['admin', 'teacher'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
 
   const allPosts = await c.env.DB.prepare(
     'SELECT p.*, u.name as author_name FROM posts p JOIN users u ON p.author_id = u.id ORDER BY p.created_at DESC LIMIT 200'
@@ -298,10 +381,11 @@ admin.put('/notifications/settings', async (c) => {
   return c.json({ success: true })
 })
 
-// 全体通知送信（管理者・先生）
+// 全体通知送信
 admin.post('/notifications/broadcast', async (c) => {
   const user = await getUser(c)
-  if (!user || !['admin', 'teacher'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
 
   const { title, body, type } = await c.req.json()
   const allUsers = await c.env.DB.prepare('SELECT id FROM users').all<any>()
@@ -331,7 +415,8 @@ admin.post('/notifications/self', async (c) => {
 // プロフィール更新許可
 admin.post('/users/:id/allow-profile-edit', async (c) => {
   const user = await getUser(c)
-  if (!user || !['admin', 'teacher'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
 
   const targetId = parseInt(c.req.param('id'))
   const { expires_at } = await c.req.json()
@@ -343,22 +428,37 @@ admin.post('/users/:id/allow-profile-edit', async (c) => {
   return c.json({ success: true })
 })
 
+// プロフィール更新許可一覧
+admin.get('/profile-edit-permissions', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
+
+  const perms = await c.env.DB.prepare(`
+    SELECT pep.*, u.name as user_name, u.username, g.name as granted_by_name
+    FROM profile_edit_permissions pep
+    JOIN users u ON pep.user_id = u.id
+    JOIN users g ON pep.granted_by = g.id
+    ORDER BY pep.created_at DESC
+  `).all<any>()
+
+  return c.json({ permissions: perms.results })
+})
+
 // 自分のプロフィール更新
 admin.put('/profile', async (c) => {
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
   const body = await c.req.json()
-  const { name, bio, avatar_url, password, club, committee, class_num, number, grade } = body
+  const { name, bio, avatar_url, password, club, committee, class_num, number, grade, username, login_id } = body
 
-  // 制限付きフィールドの変更権限チェック
+  const roles = await getUserRoles(c.env.DB, user.id)
   const sensitiveFields = [club, committee, class_num, number, grade]
   const hasSensitive = sensitiveFields.some(f => f !== undefined)
 
   if (hasSensitive) {
-    if (['admin', 'teacher'].includes(user.role)) {
-      // OK
-    } else {
+    if (!isStaff(roles)) {
       const perm = await c.env.DB.prepare(
         'SELECT * FROM profile_edit_permissions WHERE user_id = ? AND (expires_at IS NULL OR expires_at > datetime("now"))'
       ).bind(user.id).first()
@@ -377,6 +477,8 @@ admin.put('/profile', async (c) => {
   if (class_num !== undefined) { fields.push('class_num = ?'); params.push(class_num) }
   if (number !== undefined) { fields.push('number = ?'); params.push(number) }
   if (grade !== undefined) { fields.push('grade = ?'); params.push(grade) }
+  if (username !== undefined) { fields.push('username = ?'); params.push(username) }
+  if (login_id !== undefined) { fields.push('login_id = ?'); params.push(login_id) }
 
   if (password) {
     const hash = await hashPassword(password)
@@ -388,22 +490,37 @@ admin.put('/profile', async (c) => {
   await c.env.DB.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).bind(...params).run()
 
   const updated = await c.env.DB.prepare(
-    'SELECT id, username, role, name, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, avatar_url, bio FROM users WHERE id = ?'
+    'SELECT id, username, login_id, role, name, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, avatar_url, bio FROM users WHERE id = ?'
   ).bind(user.id).first()
 
   return c.json({ success: true, user: updated })
 })
 
-// 教員一覧（相談所・メッセージ用）
+// 教員一覧
 admin.get('/teachers', async (c) => {
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
   const teachers = await c.env.DB.prepare(
-    "SELECT id, name, subject, is_homeroom, homeroom_class FROM users WHERE role IN ('teacher', 'admin') ORDER BY name"
+    "SELECT id, name, subject, is_homeroom, homeroom_class FROM users WHERE id IN (SELECT user_id FROM user_roles WHERE role IN ('teacher', 'admin')) ORDER BY name"
   ).all<any>()
 
   return c.json({ teachers: teachers.results })
+})
+
+// 複数ロール一覧
+admin.get('/roles', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
+
+  const allRoles = await c.env.DB.prepare(`
+    SELECT ur.user_id, ur.role, u.name, u.username
+    FROM user_roles ur JOIN users u ON ur.user_id = u.id
+    ORDER BY u.name, ur.role
+  `).all<any>()
+
+  return c.json({ roles: allRoles.results })
 })
 
 export default admin

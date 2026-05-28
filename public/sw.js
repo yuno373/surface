@@ -1,10 +1,13 @@
-/* 上中黒板 Service Worker */
-const CACHE_NAME = 'jochu-kokuban-v1';
+/* 上中黒板 Service Worker v2 - PWA */
+const CACHE_NAME = 'jochu-kokuban-v2';
 const STATIC_ASSETS = [
   '/',
   '/static/app.js',
   '/static/style.css',
   '/manifest.json',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/badge-72.png',
 ];
 
 // インストール

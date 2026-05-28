@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: jochu-kokuban
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: node dist/server.js
+    envVars:
+      - key: CF_ACCOUNT_ID
+        sync: false
+      - key: CF_D1_DATABASE_ID
+        sync: false
+      - key: CF_API_TOKEN
+        sync: false
+      - key: CF_R2_ACCESS_KEY_ID
+        sync: false
+      - key: CF_R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: CF_R2_BUCKET
+        value: jochu-kokuban-files
+      - key: VAPID_PUBLIC_KEY
+        sync: false

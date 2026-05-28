@@ -1,51 +1,71 @@
+import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { secureHeaders } from 'hono/secure-headers'
 import auth from './routes/auth'
 import posts from './routes/posts'
 import messages from './routes/messages'
 import admin from './routes/admin'
 import questions from './routes/questions'
+import surveys from './routes/surveys'
+import checklist from './routes/checklist'
+import upload from './routes/upload'
+import { createD1Client } from './d1-client'
+import { createR2Client } from './r2-client'
 
-type Bindings = { DB: D1Database }
+type Env = { DB: any; R2: any; VAPID_PUBLIC_KEY?: string }
+const app = new Hono<{ Bindings: Env }>()
+let db: any, r2: any
+try { db = createD1Client(); r2 = createR2Client() } catch {}
 
-const app = new Hono<{ Bindings: Bindings }>()
+app.use('*', async (c, next) => {
+  if (!db) try { db = createD1Client() } catch {}
+  if (!r2) try { r2 = createR2Client() } catch {}
+  c.env = { ...c.env, DB: db, R2: r2 }
+  await next()
+})
 
 app.use('/api/*', cors({ origin: '*', credentials: true }))
+app.use('*', secureHeaders())
 
-// API routes
 app.route('/api/auth', auth)
 app.route('/api/posts', posts)
 app.route('/api/messages', messages)
 app.route('/api/admin', admin)
 app.route('/api/questions', questions)
+app.route('/api/surveys', surveys)
+app.route('/api/checklist', checklist)
+app.route('/api/upload', upload)
 
-// SPA fallback - 全リクエストでindex.htmlを返す
-app.get('*', async (c) => {
-  const url = new URL(c.req.url)
-  // APIリクエストはここに到達しないはずだが念のため
-  if (url.pathname.startsWith('/api/')) {
-    return c.json({ error: 'Not found' }, 404)
-  }
-  
-  // index.htmlの内容を直接返す
-  return c.html(`<!DOCTYPE html>
+app.get('/api/notifications/vapid-key', (c) => {
+  const publicKey = c.env.VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY || ''
+  return c.json({ publicKey })
+})
+
+const distDir = process.cwd() + '/dist'
+app.use('/static/*', serveStatic({ root: distDir }))
+app.use('/icons/*', serveStatic({ root: distDir }))
+app.use('/sw.js', serveStatic({ path: distDir + '/sw.js' }))
+app.use('/manifest.json', serveStatic({ path: distDir + '/manifest.json' }))
+
+const indexHtml = `<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>上中黒板</title>
   <meta name="theme-color" content="#1a5276">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="icon" href="/icons/icon-192.png" type="image/png">
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="bg-gray-100 text-gray-800 font-sans">
 
-<!-- ログイン画面 -->
 <div id="login-screen" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-blue-900 via-blue-700 to-indigo-800">
   <div class="w-full max-w-md px-6">
     <div class="text-center mb-8">
@@ -60,7 +80,7 @@ app.get('*', async (c) => {
       <div id="login-error" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm"></div>
       <div class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-600 mb-1">ユーザー名</label>
+          <label class="block text-sm font-medium text-gray-600 mb-1">ユーザー名 / 名前 / ログインID</label>
           <input id="login-username" type="text" placeholder="例：24101 / T001 / admin"
             class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
         </div>
@@ -82,7 +102,6 @@ app.get('*', async (c) => {
   </div>
 </div>
 
-<!-- 初回設定モーダル -->
 <div id="setup-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
   <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
     <div class="text-center mb-6">
@@ -99,7 +118,6 @@ app.get('*', async (c) => {
   </div>
 </div>
 
-<!-- 新規登録モーダル -->
 <div id="register-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60">
   <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm mx-4">
     <h2 class="text-xl font-bold mb-4 text-center">新規登録</h2>
@@ -114,73 +132,52 @@ app.get('*', async (c) => {
   </div>
 </div>
 
-<!-- メインアプリ -->
 <div id="app" class="hidden flex flex-col h-screen max-h-screen overflow-hidden">
-
-  <!-- 防災・WBGTバー（B位置） -->
   <div id="info-bar" class="flex-none">
     <div id="disaster-bar" class="bg-orange-500 text-white text-xs py-1 px-3 flex items-center gap-2 overflow-hidden">
       <i class="fas fa-shield-alt flex-none"></i>
-      <div class="overflow-hidden whitespace-nowrap">
-        <span id="disaster-text">入間市防災情報を読み込み中...</span>
+      <div class="overflow-hidden whitespace-nowrap flex-1">
+        <span id="info-bar-text" class="animate-marquee inline-block">気象情報・防災情報を読み込み中...</span>
       </div>
     </div>
-    <div id="wbgt-bar" class="bg-blue-600 text-white text-xs py-1 px-3 flex items-center gap-4">
-      <i class="fas fa-thermometer-half flex-none"></i>
-      <span id="wbgt-text">WBGT 読み込み中...</span>
-      <span id="wbgt-level" class="ml-auto font-bold"></span>
-    </div>
   </div>
-
-  <!-- ヘッダー -->
-  <header class="flex-none bg-blue-900 text-white px-4 py-2 flex items-center justify-between shadow-lg z-30">
-    <div class="flex items-center gap-2">
-      <i class="fas fa-chalkboard text-xl"></i>
-      <h1 class="font-bold text-lg">上中黒板</h1>
+  <header class="bg-gradient-to-r from-blue-900 to-blue-700 text-white px-4 py-2.5 flex items-center gap-3 flex-none shadow-md">
+    <div class="flex items-center gap-2 flex-1 min-w-0">
+      <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-lg flex-none">
+        <i class="fas fa-chalkboard"></i>
+      </div>
+      <div class="min-w-0">
+        <h1 class="font-bold text-base leading-tight truncate">上中黒板</h1>
+        <span id="digital-clock" class="text-xs text-blue-200 font-mono"></span>
+      </div>
     </div>
-    <div class="flex items-center gap-3">
-      <button onclick="showNotificationPanel()" class="relative p-1.5 hover:bg-blue-800 rounded-full">
+    <div class="flex items-center gap-2">
+      <button onclick="navigateTo('notifications')" class="relative p-1.5 hover:bg-white/10 rounded-full">
         <i class="fas fa-bell text-lg"></i>
-        <span id="notif-badge" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center">0</span>
+        <span id="notif-badge" class="hidden absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] min-w-[16px] h-4 rounded-full flex items-center justify-center px-1">0</span>
       </button>
-      <!-- I位置：アカウント情報 -->
-      <button onclick="showMyProfile()" class="flex items-center gap-2 hover:bg-blue-800 rounded-full px-2 py-1">
-        <div id="header-avatar" class="w-7 h-7 rounded-full bg-blue-400 flex items-center justify-center text-xs font-bold">
-          <i class="fas fa-user"></i>
-        </div>
-        <span id="header-name" class="text-sm font-medium hidden sm:block">-</span>
-      </button>
-      <!-- J位置：ログアウト -->
-      <button onclick="doLogout()" class="p-1.5 hover:bg-blue-800 rounded-full text-sm" title="ログアウト">
-        <i class="fas fa-sign-out-alt"></i>
-      </button>
+      <div id="header-avatar" class="w-7 h-7 rounded-full bg-blue-400 flex items-center justify-center text-xs font-bold">
+        <span>-</span>
+      </div>
+      <span id="header-name" class="text-sm font-medium hidden sm:block">-</span>
     </div>
   </header>
-
-  <!-- コンテンツエリア -->
-  <main class="flex-1 overflow-hidden flex flex-col">
-    <div id="tab-content" class="flex-1 overflow-y-auto"></div>
-  </main>
-
-  <!-- ボトムナビゲーション -->
+  <div id="tab-content" class="flex-1 overflow-y-auto"></div>
   <nav id="bottom-nav" class="flex-none bg-white border-t border-gray-200 shadow-lg z-30">
-    <div id="nav-tabs" class="flex justify-around items-center py-1"></div>
+    <div id="nav-tabs" class="flex justify-around items-center py-1 overflow-x-auto"></div>
   </nav>
 </div>
 
-<!-- 通知パネル -->
-<div id="notif-panel" class="hidden fixed inset-0 z-50 flex">
-  <div class="flex-1 bg-black/50" onclick="hideNotificationPanel()"></div>
-  <div class="w-80 max-w-full bg-white flex flex-col shadow-2xl">
-    <div class="bg-blue-900 text-white p-4 flex items-center justify-between">
-      <h3 class="font-bold"><i class="fas fa-bell mr-2"></i>通知</h3>
-      <button onclick="hideNotificationPanel()" class="text-white/70 hover:text-white"><i class="fas fa-times"></i></button>
+<div id="notif-panel" class="hidden fixed inset-0 z-40 bg-black/50" onclick="hideNotificationPanel()">
+  <div class="absolute right-0 top-0 bottom-0 w-80 max-w-[85vw] bg-white shadow-2xl" onclick="event.stopPropagation()">
+    <div class="flex items-center justify-between p-4 border-b">
+      <h3 class="font-bold text-gray-800">通知</h3>
+      <button onclick="hideNotificationPanel()" class="p-2 hover:bg-gray-100 rounded-full text-gray-500"><i class="fas fa-times"></i></button>
     </div>
     <div id="notif-list" class="flex-1 overflow-y-auto p-2 space-y-2"></div>
   </div>
 </div>
 
-<!-- 汎用モーダル -->
 <div id="modal-overlay" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
   <div id="modal-box" class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
     <div class="flex items-center justify-between p-4 border-b">
@@ -192,12 +189,18 @@ app.get('*', async (c) => {
   </div>
 </div>
 
-<!-- トースト通知 -->
 <div id="toast-container" class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none"></div>
 
 <script src="/static/app.js"></script>
 </body>
-</html>`)
+</html>`
+
+app.get('*', async (c) => {
+  const url = new URL(c.req.url)
+  if (url.pathname.startsWith('/api/')) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+  return c.html(indexHtml)
 })
 
 export default app

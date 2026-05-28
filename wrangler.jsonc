@@ -12,5 +12,12 @@
       "database_name": "jochu-kokuban-production",
       "database_id": "placeholder-id"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "jochu-kokuban-files",
+      "bucket_id": "placeholder-id"
+    }
   ]
 }

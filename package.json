@@ -2,26 +2,21 @@
   "name": "jochu-kokuban",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "dev:sandbox": "wrangler pages dev dist --ip 0.0.0.0 --port 3000",
-    "dev:d1": "wrangler pages dev dist --d1=jochu-kokuban-production --local --ip 0.0.0.0 --port 3000",
-    "build": "vite build",
-    "preview": "wrangler pages dev dist",
-    "deploy": "npm run build && wrangler pages deploy dist --project-name jochu-kokuban",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
-    "db:create": "wrangler d1 create jochu-kokuban-production",
-    "db:migrate:local": "wrangler d1 migrations apply jochu-kokuban-production --local",
-    "db:migrate:prod": "wrangler d1 migrations apply jochu-kokuban-production",
-    "db:seed:local": "wrangler d1 execute jochu-kokuban-production --local --file=./seed.sql",
-    "db:reset": "rm -rf .wrangler/state/v3/d1 && npm run db:migrate:local && npm run db:seed:local"
+"dev": "tsx watch src/server.ts",
+"build": "vite build",
+"start": "node dist/server.js",
+"start:local": "node --env-file=.env dist/server.js",
+"preview": "node dist/server.js",
+"deploy": "npm run build"
   },
   "dependencies": {
-    "hono": "^4.12.12"
+    "hono": "^4.12.12",
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@hono/node-server": "^1.12.0"
   },
   "devDependencies": {
-    "@hono/vite-build": "^1.2.0",
-    "@hono/vite-dev-server": "^0.18.2",
     "vite": "^6.3.5",
-    "wrangler": "^4.4.0"
+    "tsx": "^4.16.0",
+    "@types/node": "^20.14.0"
   }
 }

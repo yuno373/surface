@@ -1,11 +1,10 @@
 import { Hono } from 'hono'
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 
-type Bindings = { DB: D1Database }
+type Bindings = { DB: any }
 
 const auth = new Hono<{ Bindings: Bindings }>()
 
-// 簡易ハッシュ（本番はbcrypt相当のものを使用、Workersではシンプルな実装）
 async function hashPassword(password: string): Promise<string> {
   const encoder = new TextEncoder()
   const data = encoder.encode(password + 'jochu_salt_2024')
@@ -15,7 +14,6 @@ async function hashPassword(password: string): Promise<string> {
 
 async function verifyPassword(password: string, hash: string): Promise<boolean> {
   const computed = await hashPassword(password)
-  // デモ用ハッシュも許可
   if (hash.startsWith('$2a$10$demo')) return true
   return computed === hash
 }
@@ -24,7 +22,25 @@ function generateSessionId(): string {
   return crypto.randomUUID()
 }
 
-// ログイン
+async function getUserRoles(db: any, userId: number): Promise<string[]> {
+  const roles = await db.prepare(
+    'SELECT role FROM user_roles WHERE user_id = ?'
+  ).bind(userId).all<any>()
+  return roles.results.map(r => r.role)
+}
+
+async function enrichUser(db: any, user: any): Promise<any> {
+  const roles = await getUserRoles(db, user.id)
+  return {
+    ...user,
+    roles,
+    is_staff: roles.some((r: string) => ['admin', 'teacher'].includes(r)),
+    is_captain_role: roles.some((r: string) => ['captain', 'chairman', 'vice_captain', 'vice_chairman', 'student_council'].includes(r)),
+    is_admin: roles.includes('admin'),
+    is_teacher: roles.includes('teacher'),
+  }
+}
+
 auth.post('/login', async (c) => {
   const { username, password } = await c.req.json()
   if (!username || !password) {
@@ -32,8 +48,8 @@ auth.post('/login', async (c) => {
   }
 
   const user = await c.env.DB.prepare(
-    'SELECT * FROM users WHERE username = ?'
-  ).bind(username).first<any>()
+    'SELECT * FROM users WHERE username = ? OR name = ? OR login_id = ?'
+  ).bind(username, username, username).first<any>()
 
   if (!user) return c.json({ error: 'ユーザーが見つかりません' }, 401)
 
@@ -55,29 +71,10 @@ auth.post('/login', async (c) => {
     path: '/'
   })
 
-  return c.json({
-    success: true,
-    user: {
-      id: user.id,
-      username: user.username,
-      role: user.role,
-      name: user.name,
-      grade: user.grade,
-      class_num: user.class_num,
-      number: user.number,
-      club: user.club,
-      committee: user.committee,
-      subject: user.subject,
-      is_homeroom: user.is_homeroom,
-      homeroom_class: user.homeroom_class,
-      avatar_url: user.avatar_url,
-      bio: user.bio,
-      first_login: user.first_login
-    }
-  })
+  const enriched = await enrichUser(c.env.DB, user)
+  return c.json({ success: true, user: enriched })
 })
 
-// ログアウト
 auth.post('/logout', async (c) => {
   const sessionId = getCookie(c, 'session')
   if (sessionId) {
@@ -87,7 +84,6 @@ auth.post('/logout', async (c) => {
   return c.json({ success: true })
 })
 
-// セッション確認
 auth.get('/me', async (c) => {
   const sessionId = getCookie(c, 'session')
   if (!sessionId) return c.json({ error: 'Not authenticated' }, 401)
@@ -99,15 +95,15 @@ auth.get('/me', async (c) => {
   if (!session) return c.json({ error: 'Session expired' }, 401)
 
   const user = await c.env.DB.prepare(
-    'SELECT id, username, role, name, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, avatar_url, bio, first_login FROM users WHERE id = ?'
+    'SELECT id, username, login_id, role, name, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, avatar_url, bio, first_login, roles_text FROM users WHERE id = ?'
   ).bind(session.user_id).first<any>()
 
   if (!user) return c.json({ error: 'User not found' }, 404)
 
-  return c.json({ user })
+  const enriched = await enrichUser(c.env.DB, user)
+  return c.json({ user: enriched })
 })
 
-// 初回ログイン設定完了
 auth.post('/setup', async (c) => {
   const sessionId = getCookie(c, 'session')
   if (!sessionId) return c.json({ error: 'Not authenticated' }, 401)
@@ -145,7 +141,6 @@ auth.post('/setup', async (c) => {
     `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`
   ).bind(...params).run()
 
-  // 通知設定がなければ作成
   const ns = await c.env.DB.prepare('SELECT id FROM notification_settings WHERE user_id = ?')
     .bind(session.user_id).first()
   if (!ns) {
@@ -155,13 +150,13 @@ auth.post('/setup', async (c) => {
   }
 
   const updatedUser = await c.env.DB.prepare(
-    'SELECT id, username, role, name, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, avatar_url, bio, first_login FROM users WHERE id = ?'
+    'SELECT id, username, login_id, role, name, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, avatar_url, bio, first_login FROM users WHERE id = ?'
   ).bind(session.user_id).first<any>()
 
-  return c.json({ success: true, user: updatedUser })
+  const enriched = await enrichUser(c.env.DB, updatedUser)
+  return c.json({ success: true, user: enriched })
 })
 
-// 登録トークンで登録
 auth.post('/register', async (c) => {
   const { token, username, password } = await c.req.json()
   if (!token || !username || !password) {
@@ -174,14 +169,18 @@ auth.post('/register', async (c) => {
 
   if (!regToken) return c.json({ error: '無効または期限切れのトークンです' }, 400)
 
-  // ユーザー名の重複チェック
   const existing = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first()
   if (existing) return c.json({ error: 'このユーザー名は既に使われています' }, 400)
 
   const hash = await hashPassword(password)
-  await c.env.DB.prepare(
+  const result = await c.env.DB.prepare(
     'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)'
   ).bind(username, hash, regToken.role).run()
+
+  const userId = result.meta.last_row_id
+  await c.env.DB.prepare(
+    'INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)'
+  ).bind(userId, regToken.role).run()
 
   await c.env.DB.prepare('UPDATE registration_tokens SET used = 1 WHERE id = ?').bind(regToken.id).run()
 

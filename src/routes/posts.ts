@@ -1,11 +1,10 @@
 import { Hono } from 'hono'
 import { getCookie } from 'hono/cookie'
 
-type Bindings = { DB: D1Database }
+type Bindings = { DB: any }
 
 const posts = new Hono<{ Bindings: Bindings }>()
 
-// セッション取得ミドルウェア
 async function getUser(c: any) {
   const sessionId = getCookie(c, 'session')
   if (!sessionId) return null
@@ -13,12 +12,14 @@ async function getUser(c: any) {
     'SELECT * FROM sessions WHERE id = ? AND expires_at > datetime("now")'
   ).bind(sessionId).first<any>()
   if (!session) return null
-  return await c.env.DB.prepare(
-    'SELECT * FROM users WHERE id = ?'
-  ).bind(session.user_id).first<any>()
+  return await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(session.user_id).first<any>()
 }
 
-// 投稿一覧取得
+async function getUserRoles(db: any, userId: number): Promise<string[]> {
+  const roles = await db.prepare('SELECT role FROM user_roles WHERE user_id = ?').bind(userId).all<any>()
+  return roles.results.map(r => r.role)
+}
+
 posts.get('/', async (c) => {
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
@@ -29,7 +30,7 @@ posts.get('/', async (c) => {
   const limit = 20
   const offset = (page - 1) * limit
 
-  let query = 'SELECT p.*, u.name as author_name, u.role as author_role FROM posts p JOIN users u ON p.author_id = u.id WHERE p.category = ? AND (p.expires_at IS NULL OR p.expires_at > datetime("now"))'
+  let query = `SELECT p.*, u.name as author_name, u.role as author_role FROM posts p JOIN users u ON p.author_id = u.id WHERE p.category = ? AND (p.expires_at IS NULL OR p.expires_at > datetime("now"))`
   let params: any[] = [category]
 
   if (target) {
@@ -41,8 +42,6 @@ posts.get('/', async (c) => {
   params.push(limit, offset)
 
   const postList = await c.env.DB.prepare(query).bind(...params).all<any>()
-
-  // リアクション数を取得
   const postIds = postList.results.map((p: any) => p.id)
   let enriched = postList.results
 
@@ -73,7 +72,6 @@ posts.get('/', async (c) => {
   return c.json({ posts: enriched, page, limit })
 })
 
-// 投稿詳細
 posts.get('/:id', async (c) => {
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
@@ -84,25 +82,24 @@ posts.get('/:id', async (c) => {
   ).bind(id).first<any>()
   if (!post) return c.json({ error: 'Not found' }, 404)
 
-  // 既読にする
   await c.env.DB.prepare(
     'INSERT OR IGNORE INTO post_reads (post_id, user_id) VALUES (?, ?)'
   ).bind(id, user.id).run()
 
-  // リアクション取得
   const reactions = await c.env.DB.prepare(
     'SELECT emoji, COUNT(*) as count FROM reactions WHERE post_id = ? GROUP BY emoji'
   ).bind(id).all<any>()
 
-  // 既読数（管理者・先生・部長・委員長のみ）
+  const roles = await getUserRoles(c.env.DB, user.id)
+  const isStaff = roles.some((r: string) => ['admin', 'teacher'].includes(r))
+
   let readCount = null
-  if (['admin', 'teacher', 'captain', 'chairman'].includes(user.role)) {
+  if (isStaff) {
     const rc = await c.env.DB.prepare(
       'SELECT COUNT(*) as cnt FROM post_reads WHERE post_id = ?'
     ).bind(id).first<any>()
     readCount = rc?.cnt || 0
 
-    // 誰がリアクションしたか
     const reactionDetails = await c.env.DB.prepare(
       'SELECT r.emoji, u.name FROM reactions r JOIN users u ON r.user_id = u.id WHERE r.post_id = ?'
     ).bind(id).all<any>()
@@ -113,29 +110,66 @@ posts.get('/:id', async (c) => {
   return c.json({ post: { ...post, reactions: reactions.results, readCount } })
 })
 
-// 投稿作成
 posts.post('/', async (c) => {
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
   const body = await c.req.json()
-  const { category, target, title, content, file_url, file_type, expires_at } = body
+  const { category, target, title, content, file_url, file_type, expires_at, is_important } = body
 
   if (!content) return c.json({ error: '内容が必要です' }, 400)
 
-  // 権限チェック
-  const canPost = checkPostPermission(user, category, target)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  const canPost = checkPostPermission(roles, user, category, target)
   if (!canPost) return c.json({ error: '投稿権限がありません' }, 403)
 
+  // 最大2ヶ月、最低1日
+  let finalExpires = expires_at || null
+  if (finalExpires) {
+    const expDate = new Date(finalExpires)
+    const maxDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
+    const minDate = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000)
+    if (expDate > maxDate) finalExpires = maxDate.toISOString()
+    if (expDate < minDate) finalExpires = minDate.toISOString()
+  }
+
   await c.env.DB.prepare(
-    'INSERT INTO posts (author_id, category, target, title, content, file_url, file_type, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(user.id, category, target || null, title || null, content, file_url || null, file_type || null, expires_at || null).run()
+    'INSERT INTO posts (author_id, category, target, title, content, file_url, file_type, expires_at, is_important) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(user.id, category, target || null, title || null, content, file_url || null, file_type || null, finalExpires, is_important ? 1 : 0).run()
 
   const newPost = await c.env.DB.prepare('SELECT last_insert_rowid() as id').first<any>()
   return c.json({ success: true, id: newPost?.id })
 })
 
-// 投稿削除
+posts.put('/:id', async (c) => {
+  const user = await getUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const id = parseInt(c.req.param('id'))
+
+  const post = await c.env.DB.prepare('SELECT * FROM posts WHERE id = ?').bind(id).first<any>()
+  if (!post) return c.json({ error: 'Not found' }, 404)
+
+  const roles = await getUserRoles(c.env.DB, user.id)
+  const isStaff = roles.some((r: string) => ['admin', 'teacher'].includes(r))
+  if (post.author_id !== user.id && !isStaff) {
+    return c.json({ error: '編集権限がありません' }, 403)
+  }
+
+  const body = await c.req.json()
+  const { title, content, expires_at, is_important } = body
+
+  let fields: string[] = ['updated_at = datetime("now")']
+  let params: any[] = []
+  if (title !== undefined) { fields.push('title = ?'); params.push(title) }
+  if (content !== undefined) { fields.push('content = ?'); params.push(content) }
+  if (expires_at !== undefined) { fields.push('expires_at = ?'); params.push(expires_at) }
+  if (is_important !== undefined) { fields.push('is_important = ?'); params.push(is_important ? 1 : 0) }
+  params.push(id)
+
+  await c.env.DB.prepare(`UPDATE posts SET ${fields.join(', ')} WHERE id = ?`).bind(...params).run()
+  return c.json({ success: true })
+})
+
 posts.delete('/:id', async (c) => {
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
@@ -144,7 +178,9 @@ posts.delete('/:id', async (c) => {
   const post = await c.env.DB.prepare('SELECT * FROM posts WHERE id = ?').bind(id).first<any>()
   if (!post) return c.json({ error: 'Not found' }, 404)
 
-  if (post.author_id !== user.id && !['admin', 'teacher'].includes(user.role)) {
+  const roles = await getUserRoles(c.env.DB, user.id)
+  const isStaff = roles.some((r: string) => ['admin', 'teacher'].includes(r))
+  if (post.author_id !== user.id && !isStaff) {
     return c.json({ error: '削除権限がありません' }, 403)
   }
 
@@ -152,10 +188,11 @@ posts.delete('/:id', async (c) => {
   return c.json({ success: true })
 })
 
-// 一括削除（管理者・先生）
 posts.delete('/', async (c) => {
   const user = await getUser(c)
-  if (!user || !['admin', 'teacher'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  const isStaff = roles.some((r: string) => ['admin', 'teacher'].includes(r))
+  if (!user || !isStaff) return c.json({ error: 'Forbidden' }, 403)
 
   const { ids } = await c.req.json()
   if (!Array.isArray(ids) || ids.length === 0) return c.json({ error: 'IDリストが必要です' }, 400)
@@ -165,7 +202,6 @@ posts.delete('/', async (c) => {
   return c.json({ success: true })
 })
 
-// リアクション追加/削除
 posts.post('/:id/react', async (c) => {
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
@@ -187,18 +223,40 @@ posts.post('/:id/react', async (c) => {
   }
 })
 
-function checkPostPermission(user: any, category: string, target: string): boolean {
-  if (['admin', 'teacher'].includes(user.role)) return true
-  if (category === 'bulletin') return false
-  if (category === 'school_notice') return false
+// 既読ユーザー一覧（管理者・先生・投稿者）
+posts.get('/:id/readers', async (c) => {
+  const user = await getUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const id = parseInt(c.req.param('id'))
+
+  const post = await c.env.DB.prepare('SELECT * FROM posts WHERE id = ?').bind(id).first<any>()
+  if (!post) return c.json({ error: 'Not found' }, 404)
+
+  const roles = await getUserRoles(c.env.DB, user.id)
+  const isStaff = roles.some((r: string) => ['admin', 'teacher'].includes(r))
+  if (post.author_id !== user.id && !isStaff) {
+    return c.json({ error: '権限がありません' }, 403)
+  }
+
+  const readers = await c.env.DB.prepare(
+    'SELECT u.id, u.name, u.role, pr.read_at FROM post_reads pr JOIN users u ON pr.user_id = u.id WHERE pr.post_id = ? ORDER BY pr.read_at ASC'
+  ).bind(id).all<any>()
+
+  return c.json({ readers: readers.results })
+})
+
+function checkPostPermission(roles: string[], user: any, category: string, target: string): boolean {
+  if (roles.some((r: string) => ['admin', 'teacher'].includes(r))) return true
+  if (category === 'bulletin') return roles.includes('admin')
+  if (category === 'school_notice') return roles.includes('admin')
   if (category === 'lost_item') {
-    return ['captain', 'chairman', 'vice_captain', 'vice_chairman'].includes(user.role)
+    return roles.some((r: string) => ['captain', 'chairman', 'vice_captain', 'vice_chairman'].includes(r))
   }
   if (category === 'club') {
-    return ['captain', 'vice_captain'].includes(user.role) && user.club === target
+    return roles.some((r: string) => ['captain', 'vice_captain'].includes(r)) && user.club === target
   }
   if (category === 'committee') {
-    return ['chairman', 'vice_chairman'].includes(user.role) && user.committee === target
+    return roles.some((r: string) => ['chairman', 'vice_chairman'].includes(r)) && user.committee === target
   }
   if (category === 'class') return false
   return false
