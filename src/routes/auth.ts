@@ -101,6 +101,20 @@ auth.get('/profile', async (c) => {
   return c.json({ user: enriched })
 })
 
+// 自分の変更リクエスト状況
+auth.get('/profile/changes', async (c) => {
+  const sessionId = getCookie(c, 'session')
+  if (!sessionId) return c.json({ error: 'Not authenticated' }, 401)
+  const session = await c.env.DB.prepare(
+    'SELECT * FROM sessions WHERE id = ? AND expires_at > datetime("now")'
+  ).bind(sessionId).first<any>()
+  if (!session) return c.json({ error: 'Session expired' }, 401)
+  const requests = await c.env.DB.prepare(
+    "SELECT field_name, old_value, new_value, status, reviewed_at, created_at FROM profile_change_requests WHERE user_id = ? ORDER BY created_at DESC"
+  ).bind(session.user_id).all<any>()
+  return c.json({ requests: requests.results || [] })
+})
+
 // プロフィール更新（自分）
 auth.put('/profile', async (c) => {
   const sessionId = getCookie(c, 'session')
