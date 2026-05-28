@@ -564,6 +564,13 @@ admin.get('/settings', async (c) => {
   const roles = await getUserRoles(c.env.DB, user.id)
   if (!user || !isAdmin(roles)) return c.json({ error: 'Forbidden' }, 403)
 
+  // テーブルがなければ作成
+  await c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '', updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`).run()
+  const defaults: Record<string, string> = { teacher_can_users: 'true', teacher_can_posts: 'true', teacher_can_bulk: 'false', notif_self_default: 'true' }
+  for (const [k, v] of Object.entries(defaults)) {
+    await c.env.DB.prepare('INSERT OR IGNORE INTO admin_settings (key, value) VALUES (?, ?)').bind(k, v).run()
+  }
+
   const settings = await c.env.DB.prepare('SELECT key, value FROM admin_settings').all<any>()
   const result: Record<string, string> = {}
   for (const s of settings.results || []) {
@@ -586,6 +593,25 @@ admin.put('/settings', async (c) => {
     ).bind(key, String(value)).run()
   }
   return c.json({ success: true })
+})
+
+// 診断
+admin.get('/diagnostics', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
+
+  const tables = ['users', 'posts', 'messages', 'message_threads', 'thread_members', 'notifications', 'surveys', 'survey_answers', 'questions', 'checklist_items', 'user_roles', 'admin_settings', 'files', 'sessions']
+  const tableStatus: Record<string, any> = {}
+  for (const t of tables) {
+    try {
+      const r = await c.env.DB.prepare(`SELECT COUNT(*) as cnt FROM ${t}`).first<any>()
+      tableStatus[t] = { exists: true, count: r?.cnt || 0 }
+    } catch {
+      tableStatus[t] = { exists: false, count: 0 }
+    }
+  }
+  return c.json({ tables: tableStatus, env: { cf_account: !!process.env?.CF_ACCOUNT_ID, r2_bucket: !!process.env?.CF_R2_BUCKET } })
 })
 
 export default admin

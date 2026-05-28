@@ -90,6 +90,31 @@ auth.get('/profile', async (c) => {
   return c.json({ user: enriched })
 })
 
+// プロフィール更新（自分）
+auth.put('/profile', async (c) => {
+  const sessionId = getCookie(c, 'session')
+  if (!sessionId) return c.json({ error: 'Not authenticated' }, 401)
+  const session = await c.env.DB.prepare(
+    'SELECT * FROM sessions WHERE id = ? AND expires_at > datetime("now")'
+  ).bind(sessionId).first<any>()
+  if (!session) return c.json({ error: 'Session expired' }, 401)
+
+  const body = await c.req.json()
+  const allowedFields = ['name', 'bio', 'club', 'committee', 'avatar_url'] as const
+  const updates: string[] = []
+  const params: any[] = []
+  for (const field of allowedFields) {
+    if (body[field] !== undefined) {
+      updates.push(`${field} = ?`)
+      params.push(body[field])
+    }
+  }
+  if (updates.length === 0) return c.json({ error: 'No valid fields' }, 400)
+  params.push(session.user_id)
+  await c.env.DB.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run()
+  return c.json({ success: true })
+})
+
 auth.post('/logout', async (c) => {
   const sessionId = getCookie(c, 'session')
   if (sessionId) {
