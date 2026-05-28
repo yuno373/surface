@@ -50,7 +50,7 @@ app.get('/api/wbgt', async (c) => {
       return c.json({ wbgt: null, disaster: '気象情報取得中', level: null, alert: null })
     }
   } catch {}
-  return c.json({ wbgt: null, disaster: '通常', level: null, alert: null })
+  return c.json({ wbgt: null, disaster: null, level: null, alert: null })
 })
 
 const distDir = process.cwd() + '/dist'
