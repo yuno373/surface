@@ -246,19 +246,27 @@ posts.get('/:id/readers', async (c) => {
 })
 
 function checkPostPermission(roles: string[], user: any, category: string, target: string): boolean {
+  // 管理者と先生は全カテゴリに投稿可
   if (roles.some((r: string) => ['admin', 'teacher'].includes(r))) return true
-  if (category === 'bulletin') return roles.includes('admin')
-  if (category === 'school_notice') return roles.includes('admin')
+  // 生徒会は club/committee/lost_item に投稿可
+  const isStudentCouncil = roles.includes('student_council')
+  if (isStudentCouncil && ['club', 'committee', 'lost_item'].includes(category)) return true
+  // 掲示板・上中連絡は管理者のみ
+  if (['bulletin', 'school_notice'].includes(category)) return false
+  // 忘れ物: 部長・委員長・副部長・副委員長
   if (category === 'lost_item') {
     return roles.some((r: string) => ['captain', 'chairman', 'vice_captain', 'vice_chairman'].includes(r))
   }
+  // 部活動: 自分の部活の部長・副部長のみ
   if (category === 'club') {
     return roles.some((r: string) => ['captain', 'vice_captain'].includes(r)) && user.club === target
   }
+  // 委員会: 自分の委員会の委員長・副委員長のみ
   if (category === 'committee') {
     return roles.some((r: string) => ['chairman', 'vice_chairman'].includes(r)) && user.committee === target
   }
-  if (category === 'class') return false
+  // クラス掲示板は生徒も投稿可
+  if (category === 'class') return true
   return false
 }
 

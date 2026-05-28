@@ -226,7 +226,7 @@ function renderCommittee(container) {
     tabs='<button class="h-scroll-tab active">'+myCommittee+'</button>';
     if(isPE) tabs+='<button class="h-scroll-tab" onclick="switchGroupTab(\'pe_checklist\',\'\',this)"><i class="fas fa-clipboard-list mr-1"></i>用具確認</button>';
   }
-  const canPost=isStaff||roles.some(r=>['chairman','vice_chairman'].includes(r));
+  const canPost=isStaff||roles.some(r=>['chairman','vice_chairman','student_council'].includes(r));
   container.innerHTML='<div class="bg-white border-b"><div class="px-4 py-3 flex items-center justify-between"><h2 class="font-bold text-gray-800 flex items-center gap-2"><i class="fas fa-users-cog text-purple-600"></i>委員会</h2>'+(canPost?'<button onclick="openPostModal(\'committee\',window.currentCommitteeTarget)" class="bg-purple-600 text-white px-4 py-1.5 rounded-full text-sm font-semibold"><i class="fas fa-plus mr-1"></i>投稿</button>':'')+'</div><div class="h-scroll-tabs" id="committee-tabs">'+tabs+'</div></div><div class="p-3" id="committee-list"><div class="skeleton h-24"></div></div>';
   window.currentCommitteeTarget=isStaff?COMMITTEES[0]:myCommittee;
   if(window.currentCommitteeTarget) loadPosts('committee',window.currentCommitteeTarget,'committee-list');
@@ -248,7 +248,7 @@ function renderClub(container) {
   let tabs='';
   if(isStaff) tabs=CLUBS.map((c,i)=>'<button class="h-scroll-tab'+(i===0?' active':'')+'" onclick="switchGroupTab(\'club\',\''+c+'\',this)">'+c+'</button>').join('');
   else if(myClub) tabs='<button class="h-scroll-tab active">'+myClub+'</button>';
-  const canPost=isStaff||roles.some(r=>['captain','vice_captain'].includes(r));
+  const canPost=isStaff||roles.some(r=>['captain','vice_captain','student_council'].includes(r));
   container.innerHTML='<div class="bg-white border-b"><div class="px-4 py-3 flex items-center justify-between"><h2 class="font-bold text-gray-800 flex items-center gap-2"><i class="fas fa-running text-red-600"></i>部活動</h2>'+(canPost?'<button onclick="openPostModal(\'club\',window.currentClubTarget)" class="bg-red-600 text-white px-4 py-1.5 rounded-full text-sm font-semibold"><i class="fas fa-plus mr-1"></i>投稿</button>':'')+'</div><div class="h-scroll-tabs" id="club-tabs">'+tabs+'</div></div><div class="p-3" id="club-list"><div class="skeleton h-24"></div></div>';
   window.currentClubTarget=isStaff?CLUBS[0]:myClub;
   if(window.currentClubTarget) loadPosts('club',window.currentClubTarget,'club-list');
