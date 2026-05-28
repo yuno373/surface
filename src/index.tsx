@@ -98,6 +98,11 @@ const indexHtml = `<!DOCTYPE html>
           <i class="fas fa-user-plus mr-1"></i>新規登録（招待コードをお持ちの方）
         </button>
       </div>
+      <div class="mt-2 text-center border-t pt-2">
+        <button onclick="showInitForm()" class="text-gray-400 text-xs hover:underline">
+          <i class="fas fa-cog mr-1"></i>初期管理者設定
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -128,6 +133,20 @@ const indexHtml = `<!DOCTYPE html>
       <input id="reg-password" type="password" placeholder="パスワード" class="w-full px-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
       <button onclick="doRegister()" class="w-full py-2 bg-blue-600 text-white rounded-xl font-semibold text-sm">登録</button>
       <button onclick="hideRegisterModal()" class="w-full py-2 border border-gray-300 text-gray-600 rounded-xl text-sm">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<div id="init-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+  <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm mx-4">
+    <h2 class="text-xl font-bold mb-4 text-center">初期管理者設定</h2>
+    <p class="text-sm text-gray-500 mb-4 text-center">初回のみ管理者アカウントを作成できます</p>
+    <div id="init-error" class="hidden mb-3 p-2 bg-red-50 text-red-600 text-sm rounded-lg"></div>
+    <div class="space-y-3">
+      <input id="init-username" type="text" placeholder="管理者ユーザー名" class="w-full px-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <input id="init-password" type="password" placeholder="パスワード" class="w-full px-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <button onclick="doInit()" class="w-full py-2 bg-blue-600 text-white rounded-xl font-semibold text-sm">作成</button>
+      <button onclick="hideInitModal()" class="w-full py-2 border border-gray-300 text-gray-600 rounded-xl text-sm">キャンセル</button>
     </div>
   </div>
 </div>

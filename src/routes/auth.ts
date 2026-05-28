@@ -157,6 +157,22 @@ auth.post('/setup', async (c) => {
   return c.json({ success: true, user: enriched })
 })
 
+auth.post('/init', async (c) => {
+  const existing = await c.env.DB.prepare('SELECT id FROM users LIMIT 1').first()
+  if (existing) return c.json({ error: 'Already initialized' }, 400)
+  const { username, password } = await c.req.json()
+  if (!username || !password) return c.json({ error: 'username and password required' }, 400)
+  const hash = await hashPassword(password)
+  const result = await c.env.DB.prepare(
+    "INSERT INTO users (username, password_hash, role, name, first_login) VALUES (?, ?, 'admin', ?, 0)"
+  ).bind(username, hash, username).run()
+  const userId = result.meta.last_row_id
+  await c.env.DB.prepare(
+    'INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)'
+  ).bind(userId, 'admin').run()
+  return c.json({ success: true, message: '管理者アカウントを作成しました' })
+})
+
 auth.post('/register', async (c) => {
   const { token, username, password } = await c.req.json()
   if (!token || !username || !password) {

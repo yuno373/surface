@@ -48,6 +48,17 @@ function hideLogin() { document.getElementById('login-screen').classList.add('hi
 function showRegisterModal() { document.getElementById('register-modal').classList.remove('hidden'); }
 function hideRegisterModal() { document.getElementById('register-modal').classList.add('hidden'); }
 
+function showInitForm() { document.getElementById('init-modal').classList.remove('hidden'); }
+function hideInitModal() { document.getElementById('init-modal').classList.add('hidden'); }
+async function doInit() {
+  const username=document.getElementById('init-username').value.trim();
+  const password=document.getElementById('init-password').value;
+  const errEl=document.getElementById('init-error'); errEl.classList.add('hidden');
+  if(!username||!password) { errEl.textContent='入力してください'; errEl.classList.remove('hidden'); return; }
+  try { await api('/api/auth/init',{method:'POST',body:{username,password}}); hideInitModal(); toast('管理者作成完了。ログインしてください','success'); }
+  catch(e) { errEl.textContent=e.message||'作成失敗'; errEl.classList.remove('hidden'); }
+}
+
 function showSetupModal() {
   hideLogin();
   const c=document.getElementById('setup-form-container');
