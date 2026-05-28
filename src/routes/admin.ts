@@ -318,6 +318,18 @@ admin.get('/stats', async (c) => {
   })
 })
 
+// 存在するクラス一覧
+admin.get('/classes', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
+
+  const result = await c.env.DB.prepare(
+    'SELECT DISTINCT grade, class_num FROM users WHERE grade IS NOT NULL AND class_num IS NOT NULL ORDER BY grade, class_num'
+  ).all<any>()
+  return c.json({ classes: result.results || [] })
+})
+
 // システム診断
 admin.get('/diagnose', async (c) => {
   const user = await getUser(c)
