@@ -702,22 +702,39 @@ admin.post('/profile-changes/bulk-approve', async (c) => {
   const roles = await getUserRoles(c.env.DB, user.id)
   if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
 
-  const pending = await c.env.DB.prepare(
-    "SELECT * FROM profile_change_requests WHERE status = 'pending'"
-  ).all<any>()
+  const body = await c.req.json().catch(() => ({}))
+  let query = "SELECT * FROM profile_change_requests WHERE status = 'pending'"
+  const params: any[] = []
+  if (body.user_id) { query += ' AND user_id = ?'; params.push(body.user_id) }
+
+  const pending = await c.env.DB.prepare(query).bind(...params).all<any>()
 
   for (const req of pending.results || []) {
     await c.env.DB.prepare(`UPDATE users SET ${req.field_name} = ? WHERE id = ?`).bind(req.new_value, req.user_id).run()
     await c.env.DB.prepare(
       'UPDATE profile_change_requests SET status = ?, reviewed_by = ?, reviewed_at = datetime("now") WHERE id = ?'
     ).bind('approved', user.id, req.id).run()
-    // 通知作成
     const fieldLabels: Record<string, string> = { name: '名前', grade: '学年', class_num: 'クラス', number: '番号', club: '部活動', committee: '委員会' }
     await c.env.DB.prepare(
       "INSERT INTO notifications (user_id, type, message, icon) VALUES (?, 'profile_approved', ?, 'fa-check-circle')"
     ).bind(req.user_id, `${fieldLabels[req.field_name] || req.field_name}の変更が承認されました`).run()
   }
   return c.json({ success: true, count: pending.results?.length || 0 })
+})
+
+// プロフィール変更リクエスト一括却下
+admin.post('/profile-changes/bulk-reject', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
+
+  const body = await c.req.json().catch(() => ({}))
+  let query = "UPDATE profile_change_requests SET status = 'rejected', reviewed_by = ?, reviewed_at = datetime('now') WHERE status = 'pending'"
+  const params: any[] = [user.id]
+  if (body.user_id) { query += ' AND user_id = ?'; params.push(body.user_id) }
+
+  const result = await c.env.DB.prepare(query).bind(...params).run()
+  return c.json({ success: true, count: result.meta?.changes || 0 })
 })
 
 // プロフィール変更リクエスト承認
