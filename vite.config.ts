@@ -23,6 +23,7 @@ function copyPublicPlugin() {
         }
       }
       copyDir(srcDir, destDir)
+      console.log('Copied public/ to dist/')
     }
   }
 }
