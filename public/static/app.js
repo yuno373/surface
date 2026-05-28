@@ -168,7 +168,6 @@ function getVisibleTabs() {
     {id:'classgroup',icon:'fa-chalkboard-teacher',label:'クラス',visible:true},
     {id:'messages',icon:'fa-comments',label:'メッセージ',visible:true},
     {id:'captchat',icon:'fa-crown',label:'部長Chat',visible:isCaptain||isStaff},
-    {id:'survey',icon:'fa-poll',label:'アンケート',visible:true},
     {id:'consult',icon:'fa-hands-helping',label:'相談所',visible:true},
     {id:'notifications',icon:'fa-bell',label:'通知',visible:true},
     {id:'howto',icon:'fa-book-open',label:'使い方',visible:true},
@@ -200,7 +199,7 @@ function renderTab(tabId) {
   const fns={
     bulletin:renderBulletin, notice:renderNotice, committee:renderCommittee,
     club:renderClub, question:renderQuestion, classgroup:renderClassGroup,
-    messages:renderMessages, captchat:renderCaptChat, survey:renderSurveyList,
+    messages:renderMessages, captchat:renderCaptChat,
     consult:renderConsult, howto:renderHowTo, settings:renderSettings,
     notifications:renderNotifications
   };
@@ -347,11 +346,27 @@ function renderBulletin(container) {
   loadPosts('bulletin','','bulletin-list');
 }
 
-// === Notice ===
+// === Notice (上中連絡 + 忘れ物 + アンケート) ===
 function renderNotice(container) {
   const isStaff=(currentUser.roles||[currentUser.role]).some(r=>['admin','teacher'].includes(r));
-  container.innerHTML='<div class="bg-white border-b"><div class="px-4 py-3 flex items-center justify-between"><h2 class="font-bold text-gray-800 flex items-center gap-2"><i class="fas fa-school text-orange-600"></i>上中連絡</h2>'+(isStaff?'<button onclick="openPostModal(\'school_notice\')" class="bg-orange-600 text-white px-4 py-1.5 rounded-full text-sm font-semibold"><i class="fas fa-plus mr-1"></i>投稿</button>':'')+'</div></div><div class="p-3" id="notice-list"><div class="skeleton h-24"></div></div>';
-  loadPosts('school_notice','','notice-list');
+  container.innerHTML='<div class="bg-white border-b"><div class="px-4 py-3 flex items-center justify-between"><h2 class="font-bold text-gray-800 flex items-center gap-2"><i class="fas fa-school text-orange-600"></i>上中連絡</h2>'+(isStaff?'<button id="notice-add-btn" onclick="openPostModal(\'school_notice\')" class="bg-orange-600 text-white px-4 py-1.5 rounded-full text-sm font-semibold"><i class="fas fa-plus mr-1"></i>投稿</button>':'')+'</div><div class="sub-nav"><button class="sub-nav-btn active" onclick="switchNoticeTab(\'school_notice\',this)"><i class="fas fa-school mr-1"></i>連絡</button><button class="sub-nav-btn" onclick="switchNoticeTab(\'lost_item\',this)"><i class="fas fa-box-open mr-1"></i>忘れ物</button><button class="sub-nav-btn" onclick="switchNoticeTab(\'survey\',this)"><i class="fas fa-poll mr-1"></i>アンケート</button></div></div><div class="p-3" id="notice-content"><div class="skeleton h-24"></div></div>';
+  loadPosts('school_notice','','notice-content');
+}
+
+function switchNoticeTab(tab,btn) {
+  document.querySelectorAll('.sub-nav-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');
+  const c=document.getElementById('notice-content');if(!c)return;
+  const isStaff=(currentUser.roles||[currentUser.role]).some(r=>['admin','teacher'].includes(r));
+  const addBtn=document.getElementById('notice-add-btn');
+  if(tab==='survey') {
+    if(addBtn) addBtn.style.display='none';
+    c.innerHTML='<div class="flex gap-2 mb-3"><button class="sub-nav-btn active" onclick="switchSurveyTab(\'open\',this,\'notice-content\')">回答受付中</button><button class="sub-nav-btn" onclick="switchSurveyTab(\'closed\',this,\'notice-content\')">終了</button></div><div id="survey-list"><div class="skeleton h-20"></div></div>';
+    loadSurveys('open','survey-list');
+  } else {
+    if(addBtn){addBtn.style.display='';addBtn.setAttribute('onclick',"openPostModal('"+tab+"')");}
+    c.innerHTML='<div class="skeleton h-24"></div>';
+    loadPosts(tab,'','notice-content');
+  }
 }
 
 // === Question ===
@@ -494,9 +509,9 @@ function renderSurveyList(container) {
   loadSurveys('open');
 }
 
-function switchSurveyTab(tab,btn){document.querySelectorAll('.sub-nav-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');loadSurveys(tab);}
+function switchSurveyTab(tab,btn,cid){document.querySelectorAll('.sub-nav-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');loadSurveys(tab,cid||'survey-list');}
 
-async function loadSurveys(status){const c=document.getElementById('survey-list');if(!c)return;try{const r=await api('/api/surveys?status='+status);if(!r.surveys.length){c.innerHTML='<div class="empty-state"><i class="fas fa-poll-h"></i><p>'+(status==='open'?'募集中のアンケートはありません':'終了したアンケートはありません')+'</p></div>';return;}c.innerHTML=r.surveys.map(s=>{const sh=s.stats?'<div class="flex gap-2 mt-2 text-xs text-gray-500"><span>'+s.stats.total_answers+'回答</span></div>':'';const rb=s.is_answered||(currentUser.roles||[currentUser.role]).some(r=>['admin','teacher'].includes(r))?'<button onclick="viewSurveyResult('+s.id+')" class="text-purple-600 text-xs hover:underline">結果を見る</button>':'';return'<div class="card p-4 mb-3"><div class="flex justify-between items-start"><div><h3 class="font-bold text-gray-800 mb-1">'+esc(s.title)+'</h3><p class="text-xs text-gray-500">作成: '+esc(s.creator_name)+' | 期限: '+(s.due_date?formatRelative(s.due_date):'なし')+'</p></div><span class="text-xs '+(s.status==='open'?'text-green-600':'text-gray-400')+'">'+(s.status==='open'?'受付中':'終了')+'</span></div><p class="text-sm text-gray-600 mt-2">'+esc(s.description||'')+'</p>'+sh+'<div class="mt-3 flex gap-3">'+(!s.is_answered&&s.status==='open'?'<button onclick="openSurveyAnswer('+s.id+')" class="bg-purple-600 text-white px-4 py-1.5 rounded-full text-sm font-semibold">回答する</button>':'')+rb+'</div></div>';}).join('');}catch{c.innerHTML='<div class="empty-state"><i class="fas fa-exclamation-circle"></i><p>読込失敗</p></div>';}}
+async function loadSurveys(status,containerId){const c=document.getElementById(containerId||'survey-list');if(!c)return;try{const r=await api('/api/surveys?status='+status);if(!r.surveys.length){c.innerHTML='<div class="empty-state"><i class="fas fa-poll-h"></i><p>'+(status==='open'?'募集中のアンケートはありません':'終了したアンケートはありません')+'</p></div>';return;}c.innerHTML=r.surveys.map(s=>{const sh=s.stats?'<div class="flex gap-2 mt-2 text-xs text-gray-500"><span>'+s.stats.total_answers+'回答</span></div>':'';const rb=s.is_answered||(currentUser.roles||[currentUser.role]).some(r=>['admin','teacher'].includes(r))?'<button onclick="viewSurveyResult('+s.id+')" class="text-purple-600 text-xs hover:underline">結果を見る</button>':'';return'<div class="card p-4 mb-3"><div class="flex justify-between items-start"><div><h3 class="font-bold text-gray-800 mb-1">'+esc(s.title)+'</h3><p class="text-xs text-gray-500">作成: '+esc(s.creator_name)+' | 期限: '+(s.due_date?formatRelative(s.due_date):'なし')+'</p></div><span class="text-xs '+(s.status==='open'?'text-green-600':'text-gray-400')+'">'+(s.status==='open'?'受付中':'終了')+'</span></div><p class="text-sm text-gray-600 mt-2">'+esc(s.description||'')+'</p>'+sh+'<div class="mt-3 flex gap-3">'+(!s.is_answered&&s.status==='open'?'<button onclick="openSurveyAnswer('+s.id+')" class="bg-purple-600 text-white px-4 py-1.5 rounded-full text-sm font-semibold">回答する</button>':'')+rb+'</div></div>';}).join('');}catch{c.innerHTML='<div class="empty-state"><i class="fas fa-exclamation-circle"></i><p>読込失敗</p></div>';}}
 
 async function openNewSurveyModal(){showModal('アンケート作成','<div class="space-y-4"><div><label class="form-label">タイトル</label><input id="survey-title" type="text" class="form-input"></div><div><label class="form-label">説明</label><textarea id="survey-desc" class="form-input" rows="2"></textarea></div><div><label class="form-label">期限（任意）</label><input id="survey-due" type="date" class="form-input"></div><div><label class="form-label">選択肢（改行区切り）</label><textarea id="survey-options" class="form-input" rows="4" placeholder="はい&#10;いいえ&#10;どちらでもない"></textarea></div></div>',[{label:'キャンセル',className:'border border-gray-300 text-gray-600 px-4 py-2 rounded-xl',action:closeModal},{label:'作成',className:'bg-purple-600 text-white px-6 py-2 rounded-xl font-semibold',action:submitNewSurvey}]);}
 
@@ -527,7 +542,7 @@ function renderSettings(container) {
   loadSettings();
 }
 
-async function loadSettings(){const c=document.getElementById('settings-list');if(!c)return;try{const r=await api('/api/profile');let inst='';if(deferredPrompt)inst='<button onclick="installPWA()" class="w-full text-center text-green-600 py-3 font-semibold"><i class="fas fa-download mr-2"></i>アプリをインストール</button>';c.innerHTML='<div class="card p-4"><h3 class="font-bold mb-3">アカウント情報</h3><div class="space-y-3"><div class="flex justify-between items-center"><span class="text-sm text-gray-600">名前</span><span class="text-sm font-semibold">'+esc(r.user.name)+'</span></div><div class="flex justify-between items-center"><span class="text-sm text-gray-600">ログインID</span><span class="text-sm">'+esc(r.user.login_id||'-')+'</span></div><div class="flex justify-between items-center"><span class="text-sm text-gray-600">学年</span><span class="text-sm">'+esc(r.user.grade||'-')+'</span></div><div class="flex justify-between items-center"><span class="text-sm text-gray-600">クラス</span><span class="text-sm">'+esc(r.user.class_num||'-')+'</span></div></div></div>'+inst+'<button onclick="logout()" class="w-full text-center text-red-500 py-3 mt-4 font-semibold"><i class="fas fa-sign-out-alt mr-2"></i>ログアウト</button>'+(currentUser.role==='admin'?'<button onclick="renderAdmin(document.getElementById(\'tab-content\'))" class="w-full text-center text-blue-600 py-3 font-semibold"><i class="fas fa-shield-alt mr-2"></i>管理者設定</button>':'');}catch{c.innerHTML='<div class="empty-state"><i class="fas fa-exclamation-circle"></i><p>読込失敗</p></div>';}}
+async function loadSettings(){const c=document.getElementById('settings-list');if(!c)return;try{const r=await api('/api/auth/profile');let inst='';if(deferredPrompt)inst='<button onclick="installPWA()" class="w-full text-center text-green-600 py-3 font-semibold"><i class="fas fa-download mr-2"></i>アプリをインストール</button>';c.innerHTML='<div class="card p-4"><h3 class="font-bold mb-3">アカウント情報</h3><div class="space-y-3"><div class="flex justify-between items-center"><span class="text-sm text-gray-600">名前</span><span class="text-sm font-semibold">'+esc(r.user.name)+'</span></div><div class="flex justify-between items-center"><span class="text-sm text-gray-600">ログインID</span><span class="text-sm">'+esc(r.user.login_id||'-')+'</span></div><div class="flex justify-between items-center"><span class="text-sm text-gray-600">学年</span><span class="text-sm">'+esc(r.user.grade||'-')+'</span></div><div class="flex justify-between items-center"><span class="text-sm text-gray-600">クラス</span><span class="text-sm">'+esc(r.user.class_num||'-')+'</span></div></div></div>'+inst+'<button onclick="logout()" class="w-full text-center text-red-500 py-3 mt-4 font-semibold"><i class="fas fa-sign-out-alt mr-2"></i>ログアウト</button>'+(currentUser.role==='admin'?'<button onclick="renderAdmin(document.getElementById(\'tab-content\'))" class="w-full text-center text-blue-600 py-3 font-semibold"><i class="fas fa-shield-alt mr-2"></i>管理者設定</button>':'');}catch{c.innerHTML='<div class="empty-state"><i class="fas fa-exclamation-circle"></i><p>読込失敗</p></div>';}}
 
 function installPWA(){if(!deferredPrompt)return;deferredPrompt.prompt();deferredPrompt.userChoice.then(()=>{deferredPrompt=null;loadSettings();});}
 

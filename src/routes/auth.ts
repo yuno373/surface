@@ -75,6 +75,21 @@ auth.post('/login', async (c) => {
   return c.json({ success: true, user: enriched })
 })
 
+auth.get('/profile', async (c) => {
+  const sessionId = getCookie(c, 'session')
+  if (!sessionId) return c.json({ error: 'Not authenticated' }, 401)
+  const session = await c.env.DB.prepare(
+    'SELECT * FROM sessions WHERE id = ? AND expires_at > datetime("now")'
+  ).bind(sessionId).first<any>()
+  if (!session) return c.json({ error: 'Session expired' }, 401)
+  const user = await c.env.DB.prepare(
+    'SELECT id, username, login_id, role, name, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, avatar_url, bio, first_login FROM users WHERE id = ?'
+  ).bind(session.user_id).first<any>()
+  if (!user) return c.json({ error: 'User not found' }, 404)
+  const enriched = await enrichUser(c.env.DB, user)
+  return c.json({ user: enriched })
+})
+
 auth.post('/logout', async (c) => {
   const sessionId = getCookie(c, 'session')
   if (sessionId) {

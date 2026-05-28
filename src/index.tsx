@@ -54,7 +54,7 @@ const indexHtml = `<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>上中黒板</title>
-  <meta name="theme-color" content="#1a5276">
+  <meta name="theme-color" content="#2d6a4f">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="/manifest.json">
@@ -66,14 +66,14 @@ const indexHtml = `<!DOCTYPE html>
 </head>
 <body class="bg-gray-100 text-gray-800 font-sans">
 
-<div id="login-screen" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-blue-900 via-blue-700 to-indigo-800">
+  <div id="login-screen" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-green-800 via-green-600 to-teal-700">
   <div class="w-full max-w-md px-6">
     <div class="text-center mb-8">
       <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white/20 mb-4">
         <i class="fas fa-chalkboard text-white text-4xl"></i>
       </div>
       <h1 class="text-3xl font-bold text-white">上中黒板</h1>
-      <p class="text-blue-200 mt-1 text-sm">上中生のための情報共有プラットフォーム</p>
+      <p class="text-green-200 mt-1 text-sm">上中生のための情報共有プラットフォーム</p>
     </div>
     <div class="bg-white rounded-2xl shadow-2xl p-8">
       <h2 class="text-xl font-bold text-gray-700 mb-6 text-center">ログイン</h2>
@@ -89,12 +89,12 @@ const indexHtml = `<!DOCTYPE html>
           <input id="login-password" type="password" placeholder="パスワードを入力"
             class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
         </div>
-        <button onclick="doLogin()" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition shadow-lg mt-2">
+        <button onclick="doLogin()" class="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition shadow-lg mt-2">
           <i class="fas fa-sign-in-alt mr-2"></i>ログイン
         </button>
       </div>
       <div class="mt-4 text-center">
-        <button onclick="showRegisterModal()" class="text-blue-500 text-sm hover:underline">
+        <button onclick="showRegisterModal()" class="text-green-500 text-sm hover:underline">
           <i class="fas fa-user-plus mr-1"></i>新規登録（招待コードをお持ちの方）
         </button>
       </div>
@@ -117,7 +117,7 @@ const indexHtml = `<!DOCTYPE html>
       <p class="text-gray-500 text-sm mt-1">基本情報を設定してください</p>
     </div>
     <div id="setup-form-container"></div>
-    <button onclick="submitSetup()" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition mt-4">
+      <button onclick="submitSetup()" class="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition mt-4">
       <i class="fas fa-check mr-2"></i>設定を完了する
     </button>
   </div>
@@ -131,7 +131,7 @@ const indexHtml = `<!DOCTYPE html>
       <input id="reg-token" type="text" placeholder="招待コード" class="w-full px-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
       <input id="reg-username" type="text" placeholder="ユーザー名" class="w-full px-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
       <input id="reg-password" type="password" placeholder="パスワード" class="w-full px-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-      <button onclick="doRegister()" class="w-full py-2 bg-blue-600 text-white rounded-xl font-semibold text-sm">登録</button>
+      <button onclick="doRegister()" class="w-full py-2 bg-green-600 text-white rounded-xl font-semibold text-sm">登録</button>
       <button onclick="hideRegisterModal()" class="w-full py-2 border border-gray-300 text-gray-600 rounded-xl text-sm">キャンセル</button>
     </div>
   </div>
@@ -145,7 +145,7 @@ const indexHtml = `<!DOCTYPE html>
     <div class="space-y-3">
       <input id="init-username" type="text" placeholder="管理者ユーザー名" class="w-full px-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
       <input id="init-password" type="password" placeholder="パスワード" class="w-full px-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-      <button onclick="doInit()" class="w-full py-2 bg-blue-600 text-white rounded-xl font-semibold text-sm">作成</button>
+      <button onclick="doInit()" class="w-full py-2 bg-green-600 text-white rounded-xl font-semibold text-sm">作成</button>
       <button onclick="hideInitModal()" class="w-full py-2 border border-gray-300 text-gray-600 rounded-xl text-sm">キャンセル</button>
     </div>
   </div>
@@ -160,14 +160,14 @@ const indexHtml = `<!DOCTYPE html>
       </div>
     </div>
   </div>
-  <header class="bg-gradient-to-r from-blue-900 to-blue-700 text-white px-4 py-2.5 flex items-center gap-3 flex-none shadow-md">
+  <header class="bg-gradient-to-r from-teal-800 to-green-700 text-white px-4 py-2.5 flex items-center gap-3 flex-none shadow-md">
     <div class="flex items-center gap-2 flex-1 min-w-0">
       <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-lg flex-none">
         <i class="fas fa-chalkboard"></i>
       </div>
       <div class="min-w-0">
         <h1 class="font-bold text-base leading-tight truncate">上中黒板</h1>
-        <span id="digital-clock" class="text-xs text-blue-200 font-mono"></span>
+        <span id="digital-clock" class="text-xs text-green-200 font-mono"></span>
       </div>
     </div>
     <div class="flex items-center gap-2">
@@ -175,7 +175,7 @@ const indexHtml = `<!DOCTYPE html>
         <i class="fas fa-bell text-lg"></i>
         <span id="notif-badge" class="hidden absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] min-w-[16px] h-4 rounded-full flex items-center justify-center px-1">0</span>
       </button>
-      <div id="header-avatar" class="w-7 h-7 rounded-full bg-blue-400 flex items-center justify-center text-xs font-bold">
+      <div id="header-avatar" class="w-7 h-7 rounded-full bg-green-400 flex items-center justify-center text-xs font-bold">
         <span>-</span>
       </div>
       <span id="header-name" class="text-sm font-medium hidden sm:block">-</span>
