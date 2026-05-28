@@ -709,7 +709,7 @@ async function api(path,opts){const cfg=opts||{};const isForm=cfg.body instanceo
 
 function logout(){fetch('/api/auth/logout',{method:'POST',credentials:'include'}).then(()=>{window.location.reload();}).catch(()=>{window.location.reload();});}
 
-async function fetchWBGT(){try{const r=await api('/api/wbgt');const el=document.getElementById('info-bar-text');if(el){let t='';if(r.wbgt){t+='WBGT: '+r.wbgt+'°C'+(r.level?' ('+r.level+')':'')+(r.alert?' ⚠'+r.alert:'');}else{t+='WBGT: 外にいて風はゼロ';}t+=' | ';if(r.disaster&&r.disaster!=='通常'){t+=r.disaster;}else{t+='防災情報ありません';}el.textContent=t;}}catch{const el=document.getElementById('info-bar-text');if(el)el.textContent='気象情報取得失敗';}}
+async function fetchWBGT(){try{const r=await api('/api/wbgt');const el=document.getElementById('info-bar-text');if(el){if(r.wbgt){el.textContent='WBGT: '+r.wbgt+'°C ('+r.level+')'+(r.alert?' ⚠'+r.alert:'')+' | '+r.temp+'°C 湿度'+r.humidity+'%';}else{el.textContent='気象情報取得中...';}}}catch{const el=document.getElementById('info-bar-text');if(el)el.textContent='気象情報取得失敗';}}
 
 function updateInfoBar() { const el=document.getElementById('info-bar-text'); if(el) el.textContent='気象情報・防災情報を読み込み中...'; }
 

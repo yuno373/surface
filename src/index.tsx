@@ -44,13 +44,32 @@ app.get('/api/notifications/vapid-key', (c) => {
 
 app.get('/api/wbgt', async (c) => {
   try {
-    const resp = await fetch('https://www.jma.go.jp/bosai/amedas/const/amedas_area.json', { signal: AbortSignal.timeout(5000) })
+    const resp = await fetch(
+      'https://api.open-meteo.com/v1/forecast?latitude=35.6762&longitude=139.6503&current=temperature_2m,relative_humidity_2m',
+      { signal: AbortSignal.timeout(5000) }
+    )
     if (resp.ok) {
       const data = await resp.json() as any
-      return c.json({ wbgt: null, disaster: '気象情報取得中', level: null, alert: null })
+      const ta = data?.current?.temperature_2m
+      const rh = data?.current?.relative_humidity_2m
+      if (ta != null && rh != null) {
+        const tw = ta * Math.atan(0.151977 * Math.sqrt(rh + 8.313659))
+          + Math.atan(ta + rh)
+          - Math.atan(rh - 1.676331)
+          + 0.00391838 * Math.pow(rh, 1.5) * Math.atan(0.023101 * rh)
+          - 4.686035
+        const wbgt = 0.7 * tw + 0.3 * ta
+        let level = '注意'
+        let alert: string|null = null
+        if (wbgt >= 31) { level = '危険'; alert = '運動は原則中止' }
+        else if (wbgt >= 28) { level = '危険'; alert = '激しい運動は中止' }
+        else if (wbgt >= 25) { level = '厳重警戒'; alert = '積極的に休息' }
+        else if (wbgt >= 21) { level = '警戒'; alert = 'こまめに休息' }
+        return c.json({ wbgt: Math.round(wbgt * 10) / 10, level, alert, temp: ta, humidity: rh })
+      }
     }
   } catch {}
-  return c.json({ wbgt: null, disaster: null, level: null, alert: null })
+  return c.json({ wbgt: null, level: null, alert: null })
 })
 
 const distDir = process.cwd() + '/dist'
