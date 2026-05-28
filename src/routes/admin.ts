@@ -109,6 +109,35 @@ admin.put('/users/:id', async (c) => {
   return c.json({ success: true })
 })
 
+// ロール追加
+admin.post('/users/:id/roles', async (c) => {
+  const user = await getUser(c)
+  const myRoles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(myRoles)) return c.json({ error: 'Forbidden' }, 403)
+  const targetId = parseInt(c.req.param('id'))
+  const { role } = await c.req.json()
+  if (!role) return c.json({ error: 'ロールが必要です' }, 400)
+  if (!isAdmin(myRoles) && ['admin'].includes(role)) {
+    return c.json({ error: '管理者権限は付与できません' }, 403)
+  }
+  await c.env.DB.prepare('INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)').bind(targetId, role).run()
+  return c.json({ success: true })
+})
+
+// ロール削除
+admin.delete('/users/:id/roles/:role', async (c) => {
+  const user = await getUser(c)
+  const myRoles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(myRoles)) return c.json({ error: 'Forbidden' }, 403)
+  const targetId = parseInt(c.req.param('id'))
+  const role = c.req.param('role')
+  if (!isAdmin(myRoles) && ['admin'].includes(role)) {
+    return c.json({ error: '管理者権限は変更できません' }, 403)
+  }
+  await c.env.DB.prepare('DELETE FROM user_roles WHERE user_id = ? AND role = ?').bind(targetId, role).run()
+  return c.json({ success: true })
+})
+
 // ユーザー削除（個別）
 admin.delete('/users/:id', async (c) => {
   const user = await getUser(c)
