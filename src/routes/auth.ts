@@ -157,20 +157,33 @@ auth.post('/setup', async (c) => {
   return c.json({ success: true, user: enriched })
 })
 
+auth.all('/debug-env', async (c) => {
+  const required = ['CF_ACCOUNT_ID', 'CF_D1_DATABASE_ID', 'CF_API_TOKEN', 'CF_R2_ACCESS_KEY_ID', 'CF_R2_SECRET_ACCESS_KEY', 'CF_R2_BUCKET']
+  const status: any = {}
+  for (const key of required) status[key] = process.env[key] ? 'SET' : 'MISSING'
+  status.DB_OBJECT = c.env.DB ? 'EXISTS' : 'NULL'
+  return c.json(status)
+})
+
 auth.post('/init', async (c) => {
-  const existing = await c.env.DB.prepare('SELECT id FROM users LIMIT 1').first()
-  if (existing) return c.json({ error: 'Already initialized' }, 400)
-  const { username, password } = await c.req.json()
-  if (!username || !password) return c.json({ error: 'username and password required' }, 400)
-  const hash = await hashPassword(password)
-  const result = await c.env.DB.prepare(
-    "INSERT INTO users (username, password_hash, role, name, first_login) VALUES (?, ?, 'admin', ?, 0)"
-  ).bind(username, hash, username).run()
-  const userId = result.meta.last_row_id
-  await c.env.DB.prepare(
-    'INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)'
-  ).bind(userId, 'admin').run()
-  return c.json({ success: true, message: '管理者アカウントを作成しました' })
+  try {
+    if (!c.env.DB) return c.json({ error: 'DB not initialized - check env vars' }, 500)
+    const existing = await c.env.DB.prepare('SELECT id FROM users LIMIT 1').first()
+    if (existing) return c.json({ error: 'Already initialized' }, 400)
+    const { username, password } = await c.req.json()
+    if (!username || !password) return c.json({ error: 'username and password required' }, 400)
+    const hash = await hashPassword(password)
+    const result = await c.env.DB.prepare(
+      "INSERT INTO users (username, password_hash, role, name, first_login) VALUES (?, ?, 'admin', ?, 0)"
+    ).bind(username, hash, username).run()
+    const userId = result.meta.last_row_id
+    await c.env.DB.prepare(
+      'INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)'
+    ).bind(userId, 'admin').run()
+    return c.json({ success: true, message: '管理者アカウントを作成しました' })
+  } catch (e: any) {
+    return c.json({ error: e.message || String(e) }, 500)
+  }
 })
 
 auth.post('/register', async (c) => {
