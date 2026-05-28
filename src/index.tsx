@@ -93,12 +93,12 @@ const indexHtml = `<!DOCTYPE html>
         <div>
           <label class="block text-sm font-medium text-gray-600 mb-1">ユーザー名 / 名前 / ログインID</label>
           <input id="login-username" type="text" placeholder="例：24101 / T001 / admin"
-            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm">
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-600 mb-1">パスワード</label>
           <input id="login-password" type="password" placeholder="パスワードを入力"
-            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm">
         </div>
         <button onclick="doLogin()" class="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition shadow-lg mt-2">
           <i class="fas fa-sign-in-alt mr-2"></i>ログイン
@@ -121,8 +121,8 @@ const indexHtml = `<!DOCTYPE html>
 <div id="setup-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
   <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
     <div class="text-center mb-6">
-      <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-100 mb-3">
-        <i class="fas fa-user-cog text-blue-600 text-2xl"></i>
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-green-100 mb-3">
+        <i class="fas fa-user-cog text-green-600 text-2xl"></i>
       </div>
       <h2 class="text-xl font-bold text-gray-800">初回設定</h2>
       <p class="text-gray-500 text-sm mt-1">基本情報を設定してください</p>

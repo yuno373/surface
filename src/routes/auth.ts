@@ -199,6 +199,44 @@ auth.post('/init', async (c) => {
   }
 })
 
+auth.get('/notification-settings', async (c) => {
+  const sessionId = getCookie(c, 'session')
+  if (!sessionId) return c.json({ error: 'Not authenticated' }, 401)
+  const session = await c.env.DB.prepare(
+    'SELECT * FROM sessions WHERE id = ? AND expires_at > datetime("now")'
+  ).bind(sessionId).first<any>()
+  if (!session) return c.json({ error: 'Session expired' }, 401)
+  const ns = await c.env.DB.prepare(
+    'SELECT * FROM notification_settings WHERE user_id = ?'
+  ).bind(session.user_id).first<any>()
+  return c.json(ns || {})
+})
+
+auth.put('/notification-settings', async (c) => {
+  const sessionId = getCookie(c, 'session')
+  if (!sessionId) return c.json({ error: 'Not authenticated' }, 401)
+  const session = await c.env.DB.prepare(
+    'SELECT * FROM sessions WHERE id = ? AND expires_at > datetime("now")'
+  ).bind(sessionId).first<any>()
+  if (!session) return c.json({ error: 'Session expired' }, 401)
+  const body = await c.req.json()
+  const allowed = ['push_enabled', 'disaster_enabled', 'club_post_enabled', 'committee_post_enabled', 'school_notice_enabled', 'message_enabled']
+  const updates: string[] = []; const params: any[] = []
+  for (const key of allowed) {
+    if (body[key] !== undefined) { updates.push(`${key} = ?`); params.push(body[key] ? 1 : 0) }
+  }
+  if (!updates.length) return c.json({ error: 'No valid fields' }, 400)
+  params.push(session.user_id)
+  const existing = await c.env.DB.prepare('SELECT id FROM notification_settings WHERE user_id = ?').bind(session.user_id).first()
+  if (!existing) {
+    await c.env.DB.prepare('INSERT INTO notification_settings (user_id) VALUES (?)').bind(session.user_id).run()
+  }
+  await c.env.DB.prepare(
+    `UPDATE notification_settings SET ${updates.join(', ')}, updated_at = datetime("now") WHERE user_id = ?`
+  ).bind(...params).run()
+  return c.json({ success: true })
+})
+
 auth.post('/register', async (c) => {
   const { token, username, password } = await c.req.json()
   if (!token || !username || !password) {
