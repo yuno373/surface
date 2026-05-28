@@ -55,7 +55,7 @@ async function getUserRoles(db: any, userId: number): Promise<string[]> {
 
 // スレッド一覧
 messages.get('/threads', async (c) => {
-  await ensureTables(c.env.DB)
+  ensureTables(c.env.DB).catch(() => {})
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 

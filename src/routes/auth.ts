@@ -323,6 +323,16 @@ auth.get('/notification-settings', async (c) => {
     'SELECT * FROM sessions WHERE id = ? AND expires_at > datetime("now")'
   ).bind(sessionId).first<any>()
   if (!session) return c.json({ error: 'Session expired' }, 401)
+  await c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_settings (
+    user_id INTEGER PRIMARY KEY,
+    push_enabled INTEGER DEFAULT 0,
+    disaster_enabled INTEGER DEFAULT 0,
+    club_post_enabled INTEGER DEFAULT 1,
+    committee_post_enabled INTEGER DEFAULT 1,
+    school_notice_enabled INTEGER DEFAULT 1,
+    message_enabled INTEGER DEFAULT 1,
+    push_subscription TEXT
+  )`).run().catch(() => {})
   const ns = await c.env.DB.prepare(
     'SELECT * FROM notification_settings WHERE user_id = ?'
   ).bind(session.user_id).first<any>()

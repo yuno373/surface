@@ -134,7 +134,7 @@ questions.put('/:id/answer', async (c) => {
 
 // 相談一覧
 questions.get('/consultations', async (c) => {
-  await ensureConsultTable(c.env.DB)
+  ensureConsultTable(c.env.DB).catch(() => {})
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
   const roles = await getUserRoles(c.env.DB, user.id)

@@ -183,10 +183,10 @@ const indexHtml = `<!DOCTYPE html>
 
 <div id="app" class="hidden flex flex-col h-screen max-h-screen overflow-hidden">
 <div id="info-bar" class="flex-none">
-  <div id="disaster-bar" class="bg-orange-500 text-white text-xs py-1 px-3 flex items-center gap-2 overflow-hidden hidden">
+  <div id="disaster-bar" class="bg-orange-500 text-white text-xs py-1 px-3 flex items-center gap-2 overflow-hidden">
     <i class="fas fa-shield-alt flex-none"></i>
     <div class="overflow-hidden whitespace-nowrap flex-1">
-      <span id="disaster-text" class="inline-block"></span>
+      <span id="disaster-text">防災情報: 現在警報はありません</span>
     </div>
   </div>
   <div id="wbgt-bar" class="bg-teal-600 text-white text-xs py-1 px-3 flex items-center gap-2 overflow-hidden">
