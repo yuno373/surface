@@ -42,6 +42,17 @@ app.get('/api/notifications/vapid-key', (c) => {
   return c.json({ publicKey })
 })
 
+app.get('/api/wbgt', async (c) => {
+  try {
+    const resp = await fetch('https://www.jma.go.jp/bosai/amedas/const/amedas_area.json', { signal: AbortSignal.timeout(5000) })
+    if (resp.ok) {
+      const data = await resp.json() as any
+      return c.json({ wbgt: null, disaster: '気象情報取得中', level: null, alert: null })
+    }
+  } catch {}
+  return c.json({ wbgt: null, disaster: '通常', level: null, alert: null })
+})
+
 const distDir = process.cwd() + '/dist'
 app.use('/static/*', serveStatic({ root: distDir }))
 app.use('/icons/*', serveStatic({ root: distDir }))

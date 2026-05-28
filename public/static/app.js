@@ -208,7 +208,7 @@ function renderTab(tabId) {
 }
 
 function clearTimers() { [reloadTimer,notifCheckTimer,clockTimer].forEach(t=>{if(t) clearInterval(t);}); }
-function loadInfoBar() { fetchWBGT(); }
+function loadInfoBar() { updateInfoBar(); fetchWBGT(); }
 function startTimers() {
   notifCheckTimer=setInterval(fetchUnreadCount,30000);
   reloadTimer=setInterval(()=>{if(currentTab) renderTab(currentTab);},60000);
@@ -627,7 +627,9 @@ async function api(path,opts){const cfg=opts||{};const isForm=cfg.body instanceo
 
 function logout(){fetch('/api/auth/logout',{method:'POST',credentials:'include'}).then(()=>{window.location.reload();}).catch(()=>{window.location.reload();});}
 
-async function fetchWBGT(){try{const r=await api('/api/wbgt');const bar=document.getElementById('info-bar');if(bar)bar.innerHTML=r.wbgt?'<i class="fas fa-sun text-yellow-400 mr-1"></i>WBGT: '+r.wbgt+'°C'+(r.level?' ('+esc(r.level)+')':'')+(r.alert?' <span class="text-red-300 font-bold">⚠'+esc(r.alert)+'</span>':'')+' | <i class="fas fa-shield-alt mr-1"></i>'+esc(r.disaster||'') :'';}catch{}}
+async function fetchWBGT(){try{const r=await api('/api/wbgt');const el=document.getElementById('info-bar-text');if(el)el.textContent=(r.wbgt?'WBGT: '+r.wbgt+'°C'+(r.level?' ('+r.level+')':'')+(r.alert?' ⚠'+r.alert:'')+' | ':'')+(r.disaster||'情報なし');}catch{const el=document.getElementById('info-bar-text');if(el)el.textContent='気象情報取得失敗';}}
+
+function updateInfoBar() { const el=document.getElementById('info-bar-text'); if(el) el.textContent='気象情報・防災情報を読み込み中...'; }
 
 async function fetchUnreadCount(){try{const r=await api('/api/messages/unread-count');const badge=document.getElementById('msg-badge');if(badge){badge.textContent=r.count>0?(r.count>99?'99+':r.count):'';badge.classList.toggle('hidden',r.count===0);}}catch{}}
 
