@@ -134,6 +134,7 @@ questions.put('/:id/answer', async (c) => {
 
 // 相談一覧
 questions.get('/consultations', async (c) => {
+  await ensureConsultTable(c.env.DB)
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
   const roles = await getUserRoles(c.env.DB, user.id)
@@ -188,3 +189,16 @@ questions.put('/consultations/:id/reply', async (c) => {
 })
 
 export default questions
+
+async function ensureConsultTable(db: any) {
+  await db.prepare(`CREATE TABLE IF NOT EXISTS consultations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER NOT NULL,
+    teacher_id INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    reply TEXT,
+    status TEXT DEFAULT 'open',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    replied_at DATETIME
+  )`).run()
+}
