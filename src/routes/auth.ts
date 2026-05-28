@@ -131,6 +131,15 @@ auth.put('/profile', async (c) => {
     return c.json({ success: true, direct: true })
   }
 
+  // 期限チェック
+  const deadlineSetting = await c.env.DB.prepare("SELECT value FROM admin_settings WHERE key = 'allow_changes_until'").first<any>()
+  if (deadlineSetting?.value) {
+    const deadline = new Date(deadlineSetting.value)
+    if (Date.now() > deadline.getTime()) {
+      return c.json({ error: 'プロフィール変更の受付期間は終了しました' }, 403)
+    }
+  }
+
   // 生徒は承認制
   await ensureTable(c.env.DB)
   const user = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(session.user_id).first<any>()

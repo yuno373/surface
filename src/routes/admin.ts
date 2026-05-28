@@ -193,18 +193,21 @@ admin.post('/bulk-create/students', async (c) => {
   const roles = await getUserRoles(c.env.DB, user.id)
   if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
 
-  const { year, class_num, count, password } = await c.req.json()
+  const { year, class_num, count, start_num, password } = await c.req.json()
   const yearShort = String(year).slice(-2)
   const created: string[] = []
   const defaultPass = password || 'password'
   const hash = await hashPassword(defaultPass)
+  const numStart = start_num || 1
 
-  for (let num = 1; num <= count; num++) {
+  for (let i = 0; i < count; i++) {
+    const num = numStart + i
     const username = `${yearShort}${String(class_num).padStart(1, '0')}${String(num).padStart(2, '0')}`
+    const displayName = `${year}年度 ${class_num}組${num}番`
     try {
       const result = await c.env.DB.prepare(
-        'INSERT OR IGNORE INTO users (username, password_hash, role, grade, class_num, number) VALUES (?, ?, "student", ?, ?, ?)'
-      ).bind(username, hash, Math.ceil(class_num / 10) || 1, class_num, num).run()
+        'INSERT OR IGNORE INTO users (username, password_hash, login_id, role, name, grade, class_num, number) VALUES (?, ?, ?, "student", ?, ?, ?, ?)'
+      ).bind(username, hash, username, displayName, year, class_num, num).run()
 
       if (result.meta.last_row_id) {
         await c.env.DB.prepare(
@@ -240,10 +243,11 @@ admin.post('/bulk-create/teachers', async (c) => {
 
   for (let i = 0; i < count; i++) {
     const username = `T${String(startNum + i).padStart(3, '0')}`
+    const displayName = `${username} 先生`
     try {
       const result = await c.env.DB.prepare(
-        'INSERT OR IGNORE INTO users (username, password_hash, role) VALUES (?, ?, "teacher")'
-      ).bind(username, hash).run()
+        'INSERT OR IGNORE INTO users (username, password_hash, login_id, role, name) VALUES (?, ?, ?, "teacher", ?)'
+      ).bind(username, hash, username, displayName).run()
       if (result.meta.last_row_id) {
         await c.env.DB.prepare(
           'INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, "teacher")'
@@ -321,6 +325,30 @@ admin.get('/diagnose', async (c) => {
   await c.env.DB.prepare('DELETE FROM questions WHERE expires_at IS NOT NULL AND expires_at < datetime("now")').run()
 
   checks.push({ name: 'クリーンアップ', status: 'ok', message: '期限切れデータを削除しました' })
+
+  return c.json({ status: 'ok', checks, timestamp: new Date().toISOString() })
+})
+
+// 互換性: diagnosticsエイリアス
+admin.get('/diagnostics', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
+
+  const checks: any[] = []
+  try {
+    await c.env.DB.prepare('SELECT 1').first()
+    checks.push({ name: 'データベース', status: 'ok', message: '正常' })
+  } catch { checks.push({ name: 'データベース', status: 'error', message: 'DB接続エラー' }) }
+
+  // 全テーブルチェック
+  const tables = ['users', 'posts', 'messages', 'message_threads', 'thread_members', 'notifications', 'surveys', 'survey_answers', 'questions', 'checklist_items', 'user_roles', 'admin_settings', 'files', 'sessions', 'notification_settings', 'profile_change_requests']
+  for (const t of tables) {
+    try {
+      const r = await c.env.DB.prepare(`SELECT COUNT(*) as cnt FROM ${t}`).first<any>()
+      checks.push({ name: `テーブル: ${t}`, status: 'ok', message: `${r?.cnt || 0}件` })
+    } catch { checks.push({ name: `テーブル: ${t}`, status: 'error', message: '存在しないかエラー' }) }
+  }
 
   return c.json({ status: 'ok', checks, timestamp: new Date().toISOString() })
 })
@@ -566,7 +594,7 @@ admin.get('/settings', async (c) => {
 
   // テーブルがなければ作成
   await c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '', updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`).run()
-  const defaults: Record<string, string> = { teacher_can_users: 'true', teacher_can_posts: 'true', teacher_can_bulk: 'false', notif_self_default: 'true' }
+  const defaults: Record<string, string> = { teacher_can_users: 'true', teacher_can_posts: 'true', teacher_can_bulk: 'false', notif_self_default: 'true', allow_changes_until: '' }
   for (const [k, v] of Object.entries(defaults)) {
     await c.env.DB.prepare('INSERT OR IGNORE INTO admin_settings (key, value) VALUES (?, ?)').bind(k, v).run()
   }
@@ -639,6 +667,30 @@ admin.get('/profile-changes', async (c) => {
   return c.json({ requests: pending.results })
 })
 
+// プロフィール変更リクエスト一括承認
+admin.post('/profile-changes/bulk-approve', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
+
+  const pending = await c.env.DB.prepare(
+    "SELECT * FROM profile_change_requests WHERE status = 'pending'"
+  ).all<any>()
+
+  for (const req of pending.results || []) {
+    await c.env.DB.prepare(`UPDATE users SET ${req.field_name} = ? WHERE id = ?`).bind(req.new_value, req.user_id).run()
+    await c.env.DB.prepare(
+      'UPDATE profile_change_requests SET status = ?, reviewed_by = ?, reviewed_at = datetime("now") WHERE id = ?'
+    ).bind('approved', user.id, req.id).run()
+    // 通知作成
+    const fieldLabels: Record<string, string> = { name: '名前', grade: '学年', class_num: 'クラス', number: '番号', club: '部活動', committee: '委員会' }
+    await c.env.DB.prepare(
+      "INSERT INTO notifications (user_id, type, message, icon) VALUES (?, 'profile_approved', ?, 'fa-check-circle')"
+    ).bind(req.user_id, `${fieldLabels[req.field_name] || req.field_name}の変更が承認されました`).run()
+  }
+  return c.json({ success: true, count: pending.results?.length || 0 })
+})
+
 // プロフィール変更リクエスト承認
 admin.post('/profile-changes/:id/approve', async (c) => {
   const user = await getUser(c)
@@ -653,6 +705,11 @@ admin.post('/profile-changes/:id/approve', async (c) => {
   await c.env.DB.prepare(
     'UPDATE profile_change_requests SET status = ?, reviewed_by = ?, reviewed_at = datetime("now") WHERE id = ?'
   ).bind('approved', user.id, id).run()
+
+  const fieldLabels: Record<string, string> = { name: '名前', grade: '学年', class_num: 'クラス', number: '番号', club: '部活動', committee: '委員会' }
+  await c.env.DB.prepare(
+    "INSERT INTO notifications (user_id, type, message, icon) VALUES (?, 'profile_approved', ?, 'fa-check-circle')"
+  ).bind(req.user_id, `${fieldLabels[req.field_name] || req.field_name}の変更が承認されました`).run()
 
   return c.json({ success: true })
 })
