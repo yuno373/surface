@@ -3,8 +3,8 @@ let currentUser = null, currentTab = null, currentThreadId = null;
 let reloadTimer = null, notifCheckTimer = null, clockTimer = null;
 const CLUBS = ['サッカー部','男子バスケ部','女子バスケ部','卓球部','陸上部','野球部','バレーボール部','男子テニス部','女子テニス部','茶道部','美術部','吹奏楽部'];
 const COMMITTEES = ['生徒会','整備委員会','生活委員会','保健委員会','図書委員会','給食委員会','放送委員会','体育委員会','合唱委員会','中央委員会','部活動委員会','1学年委員会','2学年委員会','3学年委員会'];
-const ROLE_LABELS = {admin:'管理者',teacher:'先生',captain:'部長',chairman:'委員長',vice_captain:'副部長',vice_chairman:'副委員長',student:'生徒',student_council:'生徒会',staff:'職員',club_member:'部員',pe_committee:'体育委員'};
-const ALL_ROLES = ['admin','teacher','staff','captain','chairman','vice_captain','vice_chairman','student','student_council','club_member','pe_committee'];
+const ROLE_LABELS = {admin:'管理者',teacher:'先生',captain:'部長',chairman:'委員長',vice_captain:'副部長',vice_chairman:'副委員長',student:'生徒',student_council:'生徒会',staff:'職員',club_member:'部員'};
+const ALL_ROLES = ['admin','teacher','staff','captain','chairman','vice_captain','vice_chairman','student','student_council','club_member'];
 const EMOJIS = ['👍','❤️','😊','🎉','😮','🙏'];
 
 function esc(s) { const d=document.createElement('div'); d.appendChild(document.createTextNode(s||'')); return d.innerHTML; }
@@ -218,7 +218,7 @@ function renderCommittee(container) {
   const roles=currentUser.roles||[currentUser.role];
   const isStaff=roles.some(r=>['admin','teacher'].includes(r));
   const myCommittee=currentUser.committee;
-  const isPE=myCommittee==='体育委員会'||roles.includes('pe_committee');
+  const isPE=myCommittee==='体育委員会';
   let tabs='';
   if(isStaff) tabs=COMMITTEES.map((c,i)=>'<button class="h-scroll-tab'+(i===0?' active':'')+'" onclick="switchGroupTab(\'committee\',\''+c+'\',this)">'+c+'</button>').join('');
   else if(myCommittee) {
