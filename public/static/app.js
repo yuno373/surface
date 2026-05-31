@@ -713,6 +713,8 @@ async function loadNotifications(){const c=document.getElementById('notif-list')
 
 async function markNotifRead(id){try{await api('/api/notifications/'+id+'/read',{method:'POST'});loadNotifications();}catch{}}
 
+function esc(str){if(!str)return '';return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}
+
 // === Utilities ===
 function formatRelative(d){if(!d)return '';const t=new Date(d);const n=new Date();const diff=(n-t)/1000;if(diff<60)return '縺溘▲縺滉ｻ・;if(diff<3600)return Math.floor(diff/60)+'蛻・燕';if(diff<86400)return Math.floor(diff/3600)+'譎る俣蜑・;if(diff<172800)return '譏ｨ譌･';if(diff<2592000)return Math.floor(diff/86400)+'譌･蜑・;return t.toLocaleDateString('ja-JP',{month:'short',day:'numeric',year:diff>31536000?'numeric':undefined});}
 
@@ -733,7 +735,3 @@ function logout(){fetch('/api/auth/logout',{method:'POST',credentials:'include'}
 async function fetchWBGT(){try{const r=await api('/api/wbgt');const el=document.getElementById('wbgt-text');if(el){if(r.wbgt){const levelMap={'蜊ｱ髯ｺ':'text-red-300','蜴ｳ驥崎ｭｦ謌・:'text-yellow-300','隴ｦ謌・:'text-yellow-200','豕ｨ諢・:'text-green-200'};el.innerHTML='WBGT: <strong>'+r.wbgt+'ﾂｰC</strong> <span class="'+(levelMap[r.level]||'')+'">('+r.level+')</span>'+(r.alert?' <span class="text-yellow-200">笞'+r.alert+'</span>':'')+' | 豌玲ｸｩ'+r.temp+'ﾂｰC 貉ｿ蠎ｦ'+r.humidity+'%';}else{el.textContent='豌苓ｱ｡諠・ｱ蜿門ｾ嶺ｸｭ...';}}}catch{const el=document.getElementById('wbgt-text');if(el)el.textContent='豌苓ｱ｡諠・ｱ蜿門ｾ怜､ｱ謨・;}}
 
 async function fetchUnreadCount(){try{const r=await api('/api/messages/unread-count');const badge=document.getElementById('msg-badge');if(badge){badge.textContent=r.count>0?(r.count>99?'99+':r.count):'';badge.classList.toggle('hidden',r.count===0);}}catch{}}
-
-
-
-// FIX
