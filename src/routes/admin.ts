@@ -635,7 +635,7 @@ admin.get('/settings', async (c) => {
 
   // テーブルがなければ作成
   await c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '', updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`).run()
-  const defaults: Record<string, string> = { teacher_can_users: 'true', teacher_can_posts: 'true', teacher_can_bulk: 'false', notif_self_default: 'true', allow_changes_until: '' }
+  const defaults: Record<string, string> = { teacher_can_users: 'false', teacher_can_posts: 'true', teacher_can_bulk: 'false', notif_self_default: 'true', allow_changes_until: '' }
   for (const [k, v] of Object.entries(defaults)) {
     await c.env.DB.prepare('INSERT OR IGNORE INTO admin_settings (key, value) VALUES (?, ?)').bind(k, v).run()
   }
