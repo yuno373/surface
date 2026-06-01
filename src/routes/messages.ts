@@ -3,8 +3,10 @@ import { getCookie } from 'hono/cookie'
 
 type Bindings = { DB: any }
 const messages = new Hono<{ Bindings: Bindings }>()
+let _tablesEnsured = false
 
 async function ensureTables(db: any) {
+  if (_tablesEnsured) return
   await db.prepare(`CREATE TABLE IF NOT EXISTS message_threads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
@@ -28,6 +30,7 @@ async function ensureTables(db: any) {
     file_url TEXT,
     file_type TEXT,
     is_deleted INTEGER DEFAULT 0,
+    edited_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`).run()
   await db.prepare(`CREATE TABLE IF NOT EXISTS message_reads (
@@ -36,6 +39,18 @@ async function ensureTables(db: any) {
     read_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (message_id, user_id)
   )`).run()
+  // 既存テーブルに不足カラムを追加（マイグレーション未実行対策）
+  const alters = [
+    "ALTER TABLE messages ADD COLUMN is_deleted INTEGER DEFAULT 0",
+    "ALTER TABLE messages ADD COLUMN edited_at DATETIME",
+    "ALTER TABLE message_threads ADD COLUMN is_pinned INTEGER DEFAULT 0",
+    "ALTER TABLE message_threads ADD COLUMN is_archived INTEGER DEFAULT 0",
+    "ALTER TABLE message_threads ADD COLUMN deleted_at DATETIME",
+  ]
+  for (const sql of alters) {
+    try { await db.prepare(sql).run() } catch {}
+  }
+  _tablesEnsured = true
 }
 
 async function getUser(c: any) {
@@ -55,7 +70,7 @@ async function getUserRoles(db: any, userId: number): Promise<string[]> {
 
 // スレッド一覧
 messages.get('/threads', async (c) => {
-  ensureTables(c.env.DB).catch(() => {})
+  await ensureTables(c.env.DB)
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
@@ -102,6 +117,7 @@ messages.get('/threads', async (c) => {
 
 // キャプテンスレッド（部長・委員長チャット）専用
 messages.get('/captain-threads', async (c) => {
+  await ensureTables(c.env.DB)
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
   const roles = await getUserRoles(c.env.DB, user.id)
@@ -198,6 +214,7 @@ messages.post('/threads', async (c) => {
 
 // スレッド詳細（メンバー含む）
 messages.get('/threads/:id', async (c) => {
+  await ensureTables(c.env.DB)
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
   const threadId = parseInt(c.req.param('id'))
@@ -216,6 +233,7 @@ messages.get('/threads/:id', async (c) => {
 
 // スレッドピン留め
 messages.post('/threads/:id/pin', async (c) => {
+  await ensureTables(c.env.DB)
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
   const threadId = parseInt(c.req.param('id'))
@@ -234,6 +252,7 @@ messages.post('/threads/:id/pin', async (c) => {
 
 // スレッド削除（アーカイブ）
 messages.delete('/threads/:id', async (c) => {
+  await ensureTables(c.env.DB)
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
   const threadId = parseInt(c.req.param('id'))
@@ -252,6 +271,7 @@ messages.delete('/threads/:id', async (c) => {
 
 // メッセージ一覧
 messages.get('/threads/:threadId/messages', async (c) => {
+  await ensureTables(c.env.DB)
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
   const threadId = parseInt(c.req.param('threadId'))
@@ -321,6 +341,7 @@ messages.post('/threads/:threadId/messages', async (c) => {
 
 // メッセージ取消（削除）
 messages.delete('/threads/:threadId/messages/:messageId', async (c) => {
+  await ensureTables(c.env.DB)
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
   const threadId = parseInt(c.req.param('threadId'))
@@ -364,6 +385,20 @@ messages.post('/threads/:threadId/members', async (c) => {
       .bind(threadId, user_id).run()
   }
   return c.json({ success: true })
+})
+
+// 未読メッセージ件数
+messages.get('/unread-count', async (c) => {
+  await ensureTables(c.env.DB)
+  const user = await getUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const result = await c.env.DB.prepare(`
+    SELECT COUNT(*) as count FROM thread_members tm
+    JOIN message_threads mt ON tm.thread_id = mt.id
+    WHERE tm.user_id = ? AND mt.deleted_at IS NULL
+    AND EXISTS (SELECT 1 FROM messages m WHERE m.thread_id = mt.id AND m.is_deleted = 0 AND m.id NOT IN (SELECT message_id FROM message_reads WHERE user_id = ?))
+  `).bind(user.id, user.id).first<any>()
+  return c.json({ count: result?.count || 0 })
 })
 
 // ユーザー一覧（メッセージ相手選択用）
