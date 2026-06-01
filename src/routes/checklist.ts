@@ -248,7 +248,9 @@ checklist.get('/rentals', async (c) => {
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
   const rentals = await c.env.DB.prepare(`
-    SELECT pr.*, pci.name as item_name, u.name as user_name
+    SELECT pr.*, pci.name as item_name, pci.total_count,
+      (SELECT COUNT(*) FROM pe_rentals pr2 WHERE pr2.item_id = pr.item_id AND pr2.returned_at IS NULL) as active_rentals,
+      u.name as user_name
     FROM pe_rentals pr
     JOIN pe_checklist_items pci ON pr.item_id = pci.id
     LEFT JOIN users u ON pr.borrower_user_id = u.id
@@ -256,10 +258,10 @@ checklist.get('/rentals', async (c) => {
   `).all<any>()
 
   return c.json({ rentals: rentals.results.map(r => ({
-    id: r.id, item_name: r.item_name,
+    id: r.id, item_name: r.item_name, total_count: r.total_count, active_rentals: r.active_rentals || 0,
     borrower_name: r.borrower_name || r.user_name || '',
     borrowed_at: r.borrowed_at, returned_at: r.returned_at,
-    notes: r.notes || ''
+    notes: r.notes || '', count: r.count || 1
   })) })
 })
 
