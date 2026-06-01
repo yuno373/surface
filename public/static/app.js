@@ -216,6 +216,7 @@ function startTimers() {
 
 // === Committee ===
 function renderCommittee(container) {
+  window._peActive=null;
   const roles=currentUser.roles||[currentUser.role];
   const isStaff=roles.some(r=>['admin','teacher'].includes(r));
   const myCommittee=currentUser.committee;
@@ -236,6 +237,7 @@ function switchGroupTab(type,target,btn) {
   document.querySelectorAll('#committee-tabs .h-scroll-tab, #club-tabs .h-scroll-tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   if(type==='pe_checklist'){renderPEChecklist(document.getElementById('committee-list'));return;}
+  window._peActive=null;
   if(type==='committee'){window.currentCommitteeTarget=target;loadPosts('committee',target,'committee-list');}
   else if(type==='club'){window.currentClubTarget=target;loadPosts('club',target,'club-list');}
 }
@@ -261,9 +263,10 @@ async function loadPosts(category,target,containerId) {
     let url='/api/posts?category='+category;
     if(target) url+='&target='+encodeURIComponent(target);
     const r=await api(url);
+    if(window._peActive) return;
     if(!r.posts||!r.posts.length){c.innerHTML='<div class="empty-state"><i class="fas fa-inbox"></i><p>投稿がありません</p></div>';return;}
     c.innerHTML=r.posts.map(p=>renderPostCard(p)).join('');
-  } catch { c.innerHTML='<div class="empty-state"><i class="fas fa-exclamation-circle"></i><p>読込失敗</p></div>'; }
+  } catch { if(window._peActive) return; c.innerHTML='<div class="empty-state"><i class="fas fa-exclamation-circle"></i><p>読込失敗</p></div>'; }
 }
 
 function renderPostCard(post) {
@@ -597,7 +600,8 @@ async function submitProfileEdit(){try{const name=document.getElementById('pe-na
 
 // === PE Checklist ===
 function renderPEChecklist(container) {
-  container.innerHTML='<div><div class="flex gap-2 mb-4"><button onclick="switchPEChecklistTab(\'check\',this)" class="sub-nav-btn active">点検</button><button onclick="switchPEChecklistTab(\'history\',this)" class="sub-nav-btn">履歴</button><button onclick="switchPEChecklistTab(\'rentals\',this)" class="sub-nav-btn">貸出</button></div><div id="pe-checklist-content"><div class="skeleton h-32"></div></div></div>';
+  window._peActive='pe_checklist';
+  container.innerHTML='<div><div class="flex gap-2 mb-4" style="display:flex;gap:8px;margin-bottom:16px"><button onclick="switchPEChecklistTab(\'check\',this)" class="sub-nav-btn active">点検</button><button onclick="switchPEChecklistTab(\'history\',this)" class="sub-nav-btn">履歴</button><button onclick="switchPEChecklistTab(\'rentals\',this)" class="sub-nav-btn">貸出</button></div><div id="pe-checklist-content"><div class="skeleton h-32"></div></div></div>';
   loadPEChecklist();
 }
 
