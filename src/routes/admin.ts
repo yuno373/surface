@@ -631,7 +631,7 @@ admin.get('/roles', async (c) => {
 admin.get('/settings', async (c) => {
   const user = await getUser(c)
   const roles = await getUserRoles(c.env.DB, user.id)
-  if (!user || !isAdmin(roles)) return c.json({ error: 'Forbidden' }, 403)
+  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
 
   // テーブルがなければ作成
   await c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS admin_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '', updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`).run()
