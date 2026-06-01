@@ -1,7 +1,15 @@
 import { Hono } from 'hono'
 import { getCookie } from 'hono/cookie'
+import webpush from 'web-push'
 
 type Bindings = { DB: any }
+
+const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || ''
+const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || ''
+const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:admin@example.com'
+if (vapidPublicKey && vapidPrivateKey) {
+  webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey)
+}
 
 const posts = new Hono<{ Bindings: Bindings }>()
 
@@ -138,6 +146,28 @@ posts.post('/', async (c) => {
   ).bind(user.id, category, target || null, title || null, content, file_url || null, file_type || null, finalExpires, is_important ? 1 : 0).run()
 
   const newPost = await c.env.DB.prepare('SELECT last_insert_rowid() as id').first<any>()
+
+  // プッシュ通知を送信
+  try {
+    const notifMessage = title || content
+    let pushUsers: any[] = []
+    if (category === 'school_notice') {
+      pushUsers = (await c.env.DB.prepare(
+        "SELECT ns.push_subscription FROM notification_settings ns WHERE ns.school_notice_enabled = 1 AND ns.push_subscription IS NOT NULL AND ns.push_subscription != ''"
+      ).all<any>()).results
+    } else if ((category === 'club' || category === 'committee') && target) {
+      pushUsers = (await c.env.DB.prepare(
+        `SELECT ns.push_subscription FROM notification_settings ns JOIN users u ON ns.user_id = u.id WHERE ns.push_enabled = 1 AND ns.push_subscription IS NOT NULL AND ns.push_subscription != '' AND u.${category} = ?`
+      ).bind(target).all<any>()).results
+    }
+    if (pushUsers.length > 0 && vapidPublicKey) {
+      const pushPayload = JSON.stringify({ title: '上中黒板', body: notifMessage, type: 'post' })
+      for (const pu of pushUsers) {
+        try { await webpush.sendNotification(JSON.parse(pu.push_subscription), pushPayload) } catch {}
+      }
+    }
+  } catch {}
+
   return c.json({ success: true, id: newPost?.id })
 })
 
