@@ -194,6 +194,8 @@ checklist.post('/rentals', async (c) => {
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
+  try { await c.env.DB.prepare('ALTER TABLE pe_rentals ADD COLUMN notes TEXT').run() } catch {}
+
   const { item_id, borrower_name, borrower_user_id, borrower_id, count, notes } = await c.req.json()
   if (!item_id) return c.json({ error: '必要な情報が不足しています' }, 400)
 
@@ -208,8 +210,8 @@ checklist.post('/rentals', async (c) => {
   if (!finalBorrowerName) return c.json({ error: '借りる人の名前が必要です' }, 400)
 
   await c.env.DB.prepare(
-    'INSERT INTO pe_rentals (item_id, borrower_name, borrower_user_id, count) VALUES (?, ?, ?, ?)'
-  ).bind(item_id, finalBorrowerName, finalBorrowerUserId, count || 1).run()
+    'INSERT INTO pe_rentals (item_id, borrower_name, borrower_user_id, count, notes) VALUES (?, ?, ?, ?, ?)'
+  ).bind(item_id, finalBorrowerName, finalBorrowerUserId, count || 1, notes || null).run()
 
   return c.json({ success: true })
 })
