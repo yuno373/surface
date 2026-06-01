@@ -124,24 +124,27 @@ function showPushPrompt(){
 }
 
 function urlBase64ToUint8Array(s){const p='='.repeat((4-s.length%4)%4);const b64=(s+p).replace(/-/g,'+').replace(/_/g,'/');const raw=atob(b64);const arr=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);return arr;}
-async function requestPushPermission(){
-  try{
-    const perm=await Notification.requestPermission();
+function requestPushPermission(){
+  Notification.requestPermission().then(async function(perm){
     if(perm!=='granted'){closeModal();toast('通知がオフになりました。設定から変更できます','info');return;}
-    const reg=await navigator.serviceWorker.ready;
-    let sub;
-    try{sub=await reg.pushManager.getSubscription();}catch{}
-    if(!sub){
-      const vapidRes=await api('/api/notifications/vapid-key');
-      if(!vapidRes.publicKey){toast('通知設定が完了していません。管理者に連絡してください','error');closeModal();return;}
-      sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(vapidRes.publicKey)});
+    try{
+      var reg=await navigator.serviceWorker.ready;
+      var sub;
+      try{sub=await reg.pushManager.getSubscription();}catch{}
+      if(!sub){
+        var vapidRes=await api('/api/notifications/vapid-key');
+        if(!vapidRes.publicKey){toast('通知設定が完了していません。管理者に連絡してください','error');closeModal();return;}
+        sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(vapidRes.publicKey)});
+      }
+      var subJson=JSON.stringify(sub);
+      await api('/api/admin/notifications/settings',{method:'PUT',body:{push_enabled:true,push_subscription:subJson}});
+      closeModal();toast('通知をオンにしました','success');
+    }catch(e){
+      closeModal();toast('通知の設定に失敗しました: '+(e.message||'エラー'),'error');
     }
-    const subJson=JSON.stringify(sub);
-    await api('/api/admin/notifications/settings',{method:'PUT',body:{push_enabled:true,push_subscription:subJson}});
-    closeModal();toast('通知をオンにしました','success');
-  }catch(e){
-    closeModal();toast('通知の設定に失敗しました: '+e.message,'error');
-  }
+  }).catch(function(e){
+    closeModal();toast('通知の設定に失敗しました: '+(e.message||'エラー'),'error');
+  });
 }
 
 function startClock() {
@@ -580,7 +583,18 @@ async function toggleAdminSetting(key,el){try{await api('/api/admin/settings',{m
 
 async function loadNotifSettings(){const c=document.getElementById('notif-settings-content');if(!c)return;try{const ns=await api('/api/auth/notification-settings');c.innerHTML='<div class="space-y-2">'+['push_enabled','disaster_enabled','club_post_enabled','committee_post_enabled','school_notice_enabled','message_enabled'].map(k=>{const lb={'push_enabled':'プッシュ通知','disaster_enabled':'防災情報','club_post_enabled':'部活投稿','committee_post_enabled':'委員会投稿','school_notice_enabled':'上中連絡','message_enabled':'メッセージ'}[k];const on=ns[k]===1||ns[k]===true;return'<div class="flex items-center justify-between"><span class="text-sm text-gray-700">'+lb+'</span><div class="toggle'+(on?' on':'')+'" onclick="toggleNotifSetting(\''+k+'\',this)"></div></div>';}).join('')+'</div>';}catch{c.innerHTML='<p class="text-sm text-gray-400">読込失敗</p>';}}
 
-async function toggleNotifSetting(key,el){try{await api('/api/auth/notification-settings',{method:'PUT',body:{[key]:!el.classList.contains('on')}});el.classList.toggle('on');toast('更新しました','success');}catch(e){toast('失敗','error');}}
+async function toggleNotifSetting(key,el){
+  if(key==='push_enabled'){
+    var turningOn=!el.classList.contains('on');
+    if(turningOn){requestPushPermission();return;}
+    try{
+      var reg=await navigator.serviceWorker.ready;
+      var sub=await reg.pushManager.getSubscription();
+      if(sub)await sub.unsubscribe();
+    }catch{}
+  }
+  try{await api('/api/auth/notification-settings',{method:'PUT',body:{[key]:!el.classList.contains('on')}});el.classList.toggle('on');toast('更新しました','success');}catch(e){toast('失敗','error');}
+}
 
 function installPWA(){if(!deferredPrompt)return;deferredPrompt.prompt();deferredPrompt.userChoice.then(()=>{deferredPrompt=null;loadSettings();});}
 
