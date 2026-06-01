@@ -96,7 +96,7 @@ const indexHtml = `<!DOCTYPE html>
 </head>
 <body class="bg-gray-100 text-gray-800 font-sans">
 
-  <div id="login-screen" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-green-800 via-green-600 to-teal-700">
+  <div id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-green-800 via-green-600 to-teal-700">
   <div class="w-full max-w-md px-6">
     <div class="text-center mb-8">
       <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white/20 mb-4">
