@@ -111,7 +111,7 @@ async function checkPushSetting() {
   if(Notification.permission==='denied')return;
   try{
     const r=await api('/api/admin/notifications/settings');
-    if(r.settings?.push_enabled)return;
+    if(r.settings?.push_enabled&&r.settings?.push_subscription)return;
   }catch{}
   setTimeout(showPushPrompt,1500);
 }
@@ -123,6 +123,7 @@ function showPushPrompt(){
   ]);
 }
 
+function urlBase64ToUint8Array(s){const p='='.repeat((4-s.length%4)%4);const b64=(s+p).replace(/-/g,'+').replace(/_/g,'/');const raw=atob(b64);const arr=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);return arr;}
 async function requestPushPermission(){
   try{
     const perm=await Notification.requestPermission();
@@ -131,21 +132,15 @@ async function requestPushPermission(){
     let sub;
     try{sub=await reg.pushManager.getSubscription();}catch{}
     if(!sub){
-      try{
-        const vapidRes=await api('/api/notifications/vapid-key');
-        sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:vapidRes.publicKey});
-      }catch{
-        await api('/api/admin/notifications/settings',{method:'PUT',body:{push_enabled:true}});
-        closeModal();toast('通知をオンにしました','success');
-        return;
-      }
+      const vapidRes=await api('/api/notifications/vapid-key');
+      if(!vapidRes.publicKey){toast('通知設定が完了していません。管理者に連絡してください','error');closeModal();return;}
+      sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(vapidRes.publicKey)});
     }
     const subJson=JSON.stringify(sub);
     await api('/api/admin/notifications/settings',{method:'PUT',body:{push_enabled:true,push_subscription:subJson}});
     closeModal();toast('通知をオンにしました','success');
-  }catch{
-    try{await api('/api/admin/notifications/settings',{method:'PUT',body:{push_enabled:true}});}catch{}
-    closeModal();toast('通知をオンにしました','success');
+  }catch(e){
+    closeModal();toast('通知の設定に失敗しました: '+e.message,'error');
   }
 }
 
