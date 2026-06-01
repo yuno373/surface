@@ -117,7 +117,8 @@ const indexHtml = `<!DOCTYPE html>
         <div>
           <label class="block text-sm font-medium text-gray-600 mb-1">パスワード</label>
           <input id="login-password" type="password" placeholder="パスワードを入力"
-            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm">
+            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+            onkeydown="if(event.key==='Enter')doLogin()">
         </div>
         <button onclick="doLogin()" class="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition shadow-lg mt-2">
           <i class="fas fa-sign-in-alt mr-2"></i>ログイン
@@ -246,7 +247,9 @@ const indexHtml = `<!DOCTYPE html>
 
 <div id="toast-container" class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none"></div>
 
+<script>console.log('inline script OK');</script>
 <script src="/static/app.js?v=3"></script>
+<script>console.log('app.js loaded, doLogin:', typeof doLogin);</script>
 </body>
 </html>`
 
