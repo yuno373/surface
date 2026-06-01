@@ -383,7 +383,7 @@ admin.get('/diagnostics', async (c) => {
   } catch { checks.push({ name: 'データベース', status: 'error', message: 'DB接続エラー' }) }
 
   // 全テーブルチェック
-  const tables = ['users', 'posts', 'messages', 'message_threads', 'thread_members', 'notifications', 'surveys', 'survey_answers', 'questions', 'checklist_items', 'user_roles', 'admin_settings', 'files', 'sessions', 'notification_settings', 'profile_change_requests']
+  const tables = ['users', 'posts', 'messages', 'message_threads', 'thread_members', 'notifications', 'surveys', 'survey_answers', 'questions', 'pe_checklist_items', 'pe_checklist_logs', 'pe_rentals', 'user_roles', 'admin_settings', 'files', 'sessions', 'notification_settings', 'profile_change_requests']
   for (const t of tables) {
     try {
       const r = await c.env.DB.prepare(`SELECT COUNT(*) as cnt FROM ${t}`).first<any>()
@@ -662,25 +662,6 @@ admin.put('/settings', async (c) => {
     ).bind(key, String(value)).run()
   }
   return c.json({ success: true })
-})
-
-// 診断
-admin.get('/diagnostics', async (c) => {
-  const user = await getUser(c)
-  const roles = await getUserRoles(c.env.DB, user.id)
-  if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
-
-  const tables = ['users', 'posts', 'messages', 'message_threads', 'thread_members', 'notifications', 'surveys', 'survey_answers', 'questions', 'checklist_items', 'user_roles', 'admin_settings', 'files', 'sessions']
-  const tableStatus: Record<string, any> = {}
-  for (const t of tables) {
-    try {
-      const r = await c.env.DB.prepare(`SELECT COUNT(*) as cnt FROM ${t}`).first<any>()
-      tableStatus[t] = { exists: true, count: r?.cnt || 0 }
-    } catch {
-      tableStatus[t] = { exists: false, count: 0 }
-    }
-  }
-  return c.json({ tables: tableStatus, env: { cf_account: !!process.env?.CF_ACCOUNT_ID, r2_bucket: !!process.env?.CF_R2_BUCKET } })
 })
 
 // プロフィール変更リクエスト一覧
