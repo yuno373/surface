@@ -207,15 +207,31 @@ surveys.get('/:id/results', async (c) => {
 
   const results: any[] = []
   for (const q of questions.results) {
-    const answers = await c.env.DB.prepare(
-      'SELECT answer, COUNT(*) as cnt FROM survey_answers WHERE question_id = ? GROUP BY answer ORDER BY cnt DESC'
-    ).bind(q.id).all<any>()
-    const total = answers.results.reduce((sum: number, a: any) => sum + a.cnt, 0)
-    results.push({
-      question: q,
-      answers: answers.results,
-      total
-    })
+    if (q.question_type === 'text') {
+      const answers = await c.env.DB.prepare(
+        'SELECT sa.answer, u.name as user_name, u.id as user_id FROM survey_answers sa JOIN users u ON sa.user_id = u.id WHERE sa.question_id = ? ORDER BY sa.created_at ASC'
+      ).bind(q.id).all<any>()
+      results.push({ question: q, answers: answers.results, total: answers.results.length })
+    } else {
+      const answers = await c.env.DB.prepare(
+        'SELECT sa.answer, COUNT(*) as cnt FROM survey_answers WHERE question_id = ? GROUP BY sa.answer ORDER BY cnt DESC'
+      ).bind(q.id).all<any>()
+      const voters = await c.env.DB.prepare(
+        'SELECT sa.answer, u.name as user_name, u.id as user_id FROM survey_answers sa JOIN users u ON sa.user_id = u.id WHERE sa.question_id = ? ORDER BY sa.answer, u.name'
+      ).bind(q.id).all<any>()
+      const votersByAnswer: Record<string, { user_name: string; user_id: number }[]> = {}
+      for (const v of voters.results) {
+        const key = typeof v.answer === 'string' ? v.answer : JSON.stringify(v.answer)
+        if (!votersByAnswer[key]) votersByAnswer[key] = []
+        votersByAnswer[key].push({ user_name: v.user_name, user_id: v.user_id })
+      }
+      const total = answers.results.reduce((sum: number, a: any) => sum + a.cnt, 0)
+      results.push({
+        question: q,
+        answers: answers.results.map((a: any) => ({ ...a, voters: votersByAnswer[a.answer] || [] })),
+        total
+      })
+    }
   }
 
   const totalRespondents = await c.env.DB.prepare(
