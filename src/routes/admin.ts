@@ -523,10 +523,25 @@ admin.post('/notifications/self', async (c) => {
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
-  const { title, body, scheduled_at } = await c.req.json()
+  const { message, scheduled_at } = await c.req.json()
+  if (!message) return c.json({ error: 'メッセージが必要です' }, 400)
+
   await c.env.DB.prepare(
     'INSERT INTO notifications (user_id, type, title, body, scheduled_at, created_by) VALUES (?, "self", ?, ?, ?, ?)'
-  ).bind(user.id, title, body, scheduled_at || null, user.id).run()
+  ).bind(user.id, message, '', scheduled_at || null, user.id).run()
+
+  // 即時送信かつプッシュ通知が有効ならWeb Pushを送る
+  if (!scheduled_at) {
+    const subRow = await c.env.DB.prepare(
+      "SELECT push_subscription FROM notification_settings WHERE user_id = ? AND push_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
+    ).bind(user.id).first<any>()
+    if (subRow) {
+      try {
+        const sub = JSON.parse(subRow.push_subscription)
+        await webpush.sendNotification(sub, JSON.stringify({ title: message, body: '', type: 'self' }))
+      } catch {}
+    }
+  }
 
   return c.json({ success: true })
 })
