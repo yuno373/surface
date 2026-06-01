@@ -113,12 +113,14 @@ async function checkPushSetting() {
     const r=await api('/api/admin/notifications/settings');
     if(r.settings?.push_enabled&&r.settings?.push_subscription)return;
   }catch{}
+  if(Notification.permission==='granted')return;
+  if(localStorage.getItem('push_dismissed'))return;
   setTimeout(showPushPrompt,1500);
 }
 
 function showPushPrompt(){
   showModal('プッシュ通知','<div class="text-center space-y-4"><div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100"><i class="fas fa-bell text-blue-600 text-3xl"></i></div><p class="text-gray-700">お知らせやメッセージをリアルタイムで受け取れます。<br><strong class="text-blue-600">通知をオンにすることをおすすめします。</strong></p></div>',[
-    {label:'スキップ',className:'border border-gray-300 text-gray-600 px-4 py-2 rounded-xl',action:closeModal},
+    {label:'スキップ',className:'border border-gray-300 text-gray-600 px-4 py-2 rounded-xl',action:function(){localStorage.setItem('push_dismissed','1');closeModal();}},
     {label:'通知をオンにする（推奨）',className:'bg-blue-600 text-white px-6 py-2 rounded-xl font-semibold',action:requestPushPermission}
   ]);
 }
