@@ -107,7 +107,7 @@ function updateHeader() {
 }
 
 async function checkPushSetting() {
-  if(!('Notification' in window)||!('serviceWorker' in navigator))return;
+  if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window))return;
   if(Notification.permission==='denied')return;
   try{
     const r=await api('/api/admin/notifications/settings');
@@ -581,7 +581,7 @@ async function saveDeadline(){const v=document.getElementById('setting-deadline'
 
 async function toggleAdminSetting(key,el){try{await api('/api/admin/settings',{method:'PUT',body:{settings:{[key]:!el.classList.contains('on')?true:false}}});el.classList.toggle('on');toast('更新しました','success');}catch(e){toast('失敗','error');}}
 
-async function loadNotifSettings(){const c=document.getElementById('notif-settings-content');if(!c)return;try{const ns=await api('/api/auth/notification-settings');c.innerHTML='<div class="space-y-2">'+['push_enabled','disaster_enabled','club_post_enabled','committee_post_enabled','school_notice_enabled','message_enabled'].map(k=>{const lb={'push_enabled':'プッシュ通知','disaster_enabled':'防災情報','club_post_enabled':'部活投稿','committee_post_enabled':'委員会投稿','school_notice_enabled':'上中連絡','message_enabled':'メッセージ'}[k];const on=ns[k]===1||ns[k]===true;return'<div class="flex items-center justify-between"><span class="text-sm text-gray-700">'+lb+'</span><div class="toggle'+(on?' on':'')+'" onclick="toggleNotifSetting(\''+k+'\',this)"></div></div>';}).join('')+'</div>';}catch{c.innerHTML='<p class="text-sm text-gray-400">読込失敗</p>';}}
+async function loadNotifSettings(){const c=document.getElementById('notif-settings-content');if(!c)return;try{const ns=await api('/api/auth/notification-settings');const pushSupported='PushManager' in window;const keys=['disaster_enabled','club_post_enabled','committee_post_enabled','school_notice_enabled','message_enabled'];if(pushSupported)keys.unshift('push_enabled');c.innerHTML='<div class="space-y-2">'+keys.map(k=>{const lb={'push_enabled':'プッシュ通知','disaster_enabled':'防災情報','club_post_enabled':'部活投稿','committee_post_enabled':'委員会投稿','school_notice_enabled':'上中連絡','message_enabled':'メッセージ'}[k];const on=ns[k]===1||ns[k]===true;return'<div class="flex items-center justify-between"><span class="text-sm text-gray-700">'+lb+'</span><div class="toggle'+(on?' on':'')+'" onclick="toggleNotifSetting(\''+k+'\',this)"></div></div>';}).join('')+'</div>';}catch{c.innerHTML='<p class="text-sm text-gray-400">読込失敗</p>';}}
 
 async function toggleNotifSetting(key,el){
   if(key==='push_enabled'){
