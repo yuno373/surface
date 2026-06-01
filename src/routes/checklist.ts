@@ -36,12 +36,25 @@ checklist.get('/items', async (c) => {
     'SELECT pci.*, u.name as last_checked_by_name FROM pe_checklist_items pci LEFT JOIN users u ON pci.last_checked_by = u.id ORDER BY pci.name'
   ).all<any>()
 
+  const roles = await getUserRoles(c.env.DB, user.id)
+  const canCheck = isPEMember(user) || isManager(roles)
+
   // 各項目の貸出中数
   const enriched = await Promise.all(items.results.map(async (item: any) => {
     const activeRentals = await c.env.DB.prepare(
       'SELECT COUNT(*) as cnt FROM pe_rentals WHERE item_id = ? AND returned_at IS NULL'
     ).bind(item.id).first<any>()
-    return { ...item, active_rentals: activeRentals?.cnt || 0 }
+    return {
+      id: item.id,
+      name: item.name,
+      total_count: item.total_count,
+      status: item.checked ? 'ok' : 'ng',
+      can_check: canCheck,
+      location: item.location || '',
+      last_checker: item.last_checked_by_name || null,
+      last_checked: item.last_checked_at || null,
+      active_rentals: activeRentals?.cnt || 0
+    }
   }))
 
   return c.json({ items: enriched })
@@ -91,6 +104,28 @@ checklist.delete('/items/:id', async (c) => {
 })
 
 // チェック状態の切り替え（体育委員会所属なら誰でも可）
+checklist.post('/items/:id/check', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  if (!isPEMember(user) && !isManager(roles)) {
+    return c.json({ error: '体育委員会のみチェックできます' }, 403)
+  }
+  const id = parseInt(c.req.param('id'))
+  const { status } = await c.req.json()
+  const newChecked = status === 'ok' ? 1 : 0
+  const item = await c.env.DB.prepare('SELECT * FROM pe_checklist_items WHERE id = ?').bind(id).first<any>()
+  if (!item) return c.json({ error: 'Not found' }, 404)
+  await c.env.DB.prepare(
+    'UPDATE pe_checklist_items SET checked = ?, last_checked_by = ?, last_checked_at = datetime("now") WHERE id = ?'
+  ).bind(newChecked, user.id, id).run()
+  await c.env.DB.prepare(
+    'INSERT INTO pe_checklist_logs (item_id, user_id, checked) VALUES (?, ?, ?)'
+  ).bind(id, user.id, newChecked).run()
+  return c.json({ success: true, status, checked_by: user.name, checked_at: new Date().toISOString() })
+})
+
+// 互換性: 既存のtoggleエンドポイント
 checklist.post('/items/:id/toggle', async (c) => {
   const user = await getUser(c)
   const roles = await getUserRoles(c.env.DB, user.id)
@@ -135,22 +170,64 @@ checklist.get('/items/:id/logs', async (c) => {
   return c.json({ logs: logs.results })
 })
 
+// 全点検履歴
+checklist.get('/history', async (c) => {
+  const user = await getUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const history = await c.env.DB.prepare(`
+    SELECT pcl.*, pci.name as item_name, u.name as checker_name
+    FROM pe_checklist_logs pcl
+    JOIN pe_checklist_items pci ON pcl.item_id = pci.id
+    JOIN users u ON pcl.user_id = u.id
+    ORDER BY pcl.checked_at DESC LIMIT 50
+  `).all<any>()
+  return c.json({ history: history.results.map(h => ({
+    item_name: h.item_name,
+    checker_name: h.checker_name,
+    status: h.checked ? 'ok' : 'ng',
+    created_at: h.checked_at
+  })) })
+})
+
 // 貸出し記録
 checklist.post('/rentals', async (c) => {
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
-  const { item_id, borrower_name, borrower_user_id, count } = await c.req.json()
-  if (!item_id || !borrower_name) return c.json({ error: '必要な情報が不足しています' }, 400)
+  const { item_id, borrower_name, borrower_user_id, borrower_id, count, notes } = await c.req.json()
+  if (!item_id) return c.json({ error: '必要な情報が不足しています' }, 400)
+
+  let finalBorrowerName = borrower_name || ''
+  const finalBorrowerUserId = borrower_user_id || borrower_id || null
+
+  // borrower_idから名前を取得
+  if (!finalBorrowerName && finalBorrowerUserId) {
+    const u = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(finalBorrowerUserId).first<any>()
+    if (u) finalBorrowerName = u.name
+  }
+  if (!finalBorrowerName) return c.json({ error: '借りる人の名前が必要です' }, 400)
 
   await c.env.DB.prepare(
     'INSERT INTO pe_rentals (item_id, borrower_name, borrower_user_id, count) VALUES (?, ?, ?, ?)'
-  ).bind(item_id, borrower_name, borrower_user_id || null, count || 1).run()
+  ).bind(item_id, finalBorrowerName, finalBorrowerUserId, count || 1).run()
 
   return c.json({ success: true })
 })
 
 // 返却
+checklist.post('/rentals/:id/return', async (c) => {
+  const user = await getUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+
+  const id = parseInt(c.req.param('id'))
+  await c.env.DB.prepare(
+    'UPDATE pe_rentals SET returned_at = datetime("now") WHERE id = ?'
+  ).bind(id).run()
+
+  return c.json({ success: true })
+})
+
+// PUT互換性
 checklist.put('/rentals/:id/return', async (c) => {
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
@@ -168,25 +245,20 @@ checklist.get('/rentals', async (c) => {
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
-  const active = await c.env.DB.prepare(`
+  const rentals = await c.env.DB.prepare(`
     SELECT pr.*, pci.name as item_name, u.name as user_name
     FROM pe_rentals pr
     JOIN pe_checklist_items pci ON pr.item_id = pci.id
     LEFT JOIN users u ON pr.borrower_user_id = u.id
-    WHERE pr.returned_at IS NULL
-    ORDER BY pr.borrowed_at DESC
+    ORDER BY pr.borrowed_at DESC LIMIT 50
   `).all<any>()
 
-  const history = await c.env.DB.prepare(`
-    SELECT pr.*, pci.name as item_name, u.name as user_name
-    FROM pe_rentals pr
-    JOIN pe_checklist_items pci ON pr.item_id = pci.id
-    LEFT JOIN users u ON pr.borrower_user_id = u.id
-    WHERE pr.returned_at IS NOT NULL
-    ORDER BY pr.returned_at DESC LIMIT 20
-  `).all<any>()
-
-  return c.json({ active: active.results, history: history.results })
+  return c.json({ rentals: rentals.results.map(r => ({
+    id: r.id, item_name: r.item_name,
+    borrower_name: r.borrower_name || r.user_name || '',
+    borrowed_at: r.borrowed_at, returned_at: r.returned_at,
+    notes: r.notes || ''
+  })) })
 })
 
 export default checklist
