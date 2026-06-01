@@ -162,7 +162,7 @@ admin.delete('/users/:id', async (c) => {
 admin.post('/users/bulk-delete', async (c) => {
   const user = await getUser(c)
   const myRoles = await getUserRoles(c.env.DB, user.id)
-  if (!user || !isStaff(myRoles)) return c.json({ error: 'Forbidden' }, 403)
+  if (!user || !isAdmin(myRoles)) return c.json({ error: 'Forbidden（管理者のみ）' }, 403)
 
   const { grade, class_num } = await c.req.json()
   if (!grade) return c.json({ error: '学年は必須です' }, 400)
