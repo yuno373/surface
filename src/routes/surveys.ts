@@ -19,6 +19,14 @@ async function getUserRoles(db: any, userId: number): Promise<string[]> {
   return roles.results.map(r => r.role)
 }
 
+function isTargetMatch(survey: any, user: any): boolean {
+  if (!survey.target || survey.target === 'all') return true
+  if (survey.target === 'class') return user.grade && user.class_num && `${user.grade}-${user.class_num}` === survey.target_value
+  if (survey.target === 'club') return user.club === survey.target_value
+  if (survey.target === 'committee') return user.committee === survey.target_value
+  return true
+}
+
 // アンケート一覧
 surveys.get('/', async (c) => {
   const user = await getUser(c)
@@ -46,6 +54,7 @@ surveys.get('/', async (c) => {
       WHERE (s.expires_at IS NULL OR s.expires_at > datetime("now"))
       ORDER BY s.created_at DESC
     `).bind(user.id).all<any>()
+    surveys.results = surveys.results.filter(s => isTargetMatch(s, user))
   }
 
   return c.json({ surveys: surveys.results })
@@ -95,14 +104,14 @@ surveys.post('/', async (c) => {
     return c.json({ error: 'Forbidden' }, 403)
   }
 
-  const { title, description, questions, expires_at } = await c.req.json()
+  const { title, description, questions, expires_at, target, target_value } = await c.req.json()
   if (!title || !questions || !Array.isArray(questions) || questions.length === 0) {
     return c.json({ error: 'タイトルと質問が必要です' }, 400)
   }
 
   const result = await c.env.DB.prepare(
-    'INSERT INTO surveys (title, description, created_by, expires_at) VALUES (?, ?, ?, ?)'
-  ).bind(title, description || null, user.id, expires_at || null).run()
+    'INSERT INTO surveys (title, description, created_by, expires_at, target, target_value) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(title, description || null, user.id, expires_at || null, target || 'all', target_value || null).run()
 
   const surveyId = result.meta.last_row_id
 
@@ -125,12 +134,12 @@ surveys.put('/:id', async (c) => {
   }
 
   const id = parseInt(c.req.param('id'))
-  const { title, description, questions, expires_at } = await c.req.json()
+  const { title, description, questions, expires_at, target, target_value } = await c.req.json()
 
   if (title !== undefined) {
     await c.env.DB.prepare(
-      'UPDATE surveys SET title = ?, description = ?, expires_at = ? WHERE id = ?'
-    ).bind(title, description || null, expires_at || null, id).run()
+      'UPDATE surveys SET title = ?, description = ?, expires_at = ?, target = ?, target_value = ? WHERE id = ?'
+    ).bind(title, description || null, expires_at || null, target || 'all', target_value || null, id).run()
   }
 
   if (questions && Array.isArray(questions)) {
@@ -171,6 +180,11 @@ surveys.post('/:id/answers', async (c) => {
     'SELECT * FROM surveys WHERE id = ? AND (expires_at IS NULL OR expires_at > datetime("now"))'
   ).bind(surveyId).first<any>()
   if (!survey) return c.json({ error: 'アンケートが見つからないか期限切れです' }, 404)
+
+  // 対象者チェック
+  if (!isTargetMatch(survey, user)) {
+    return c.json({ error: 'このアンケートはあなたの対象ではありません' }, 403)
+  }
 
   // 既存回答をチェック
   const existing = await c.env.DB.prepare(
