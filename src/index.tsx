@@ -2,6 +2,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { secureHeaders } from 'hono/secure-headers'
+import webpush from 'web-push'
 import auth from './routes/auth'
 import posts from './routes/posts'
 import messages from './routes/messages'
@@ -13,7 +14,7 @@ import upload from './routes/upload'
 import { createD1Client } from './d1-client'
 import { createR2Client } from './r2-client'
 
-type Env = { DB: any; R2: any; VAPID_PUBLIC_KEY?: string }
+type Env = { DB: any; R2: any; VAPID_PUBLIC_KEY?: string; VAPID_PRIVATE_KEY?: string; VAPID_SUBJECT?: string }
 const app = new Hono<{ Bindings: Env }>()
 let db: any, r2: any
 try { db = createD1Client(); r2 = createR2Client() } catch {}
@@ -41,6 +42,14 @@ app.get('/api/notifications/vapid-key', (c) => {
   const publicKey = c.env.VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY || ''
   return c.json({ publicKey })
 })
+
+// Initialize web-push with VAPID keys
+const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || ''
+const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || ''
+const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:admin@example.com'
+if (vapidPublicKey && vapidPrivateKey) {
+  webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey)
+}
 
 app.get('/api/wbgt', async (c) => {
   try {

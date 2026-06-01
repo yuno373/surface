@@ -2,21 +2,22 @@
   "name": "jochu-kokuban",
   "type": "module",
   "scripts": {
-"dev": "tsx watch src/server.ts",
-"build": "vite build",
-"start": "node dist/server.js",
-"start:local": "node --env-file=.env dist/server.js",
-"preview": "node dist/server.js",
-"deploy": "npm run build"
+    "dev": "tsx watch src/server.ts",
+    "build": "vite build",
+    "start": "node dist/server.js",
+    "start:local": "node --env-file=.env dist/server.js",
+    "preview": "node dist/server.js",
+    "deploy": "npm run build"
   },
   "dependencies": {
-    "hono": "^4.12.12",
     "@aws-sdk/client-s3": "^3.600.0",
-    "@hono/node-server": "^1.12.0"
+    "@hono/node-server": "^1.12.0",
+    "hono": "^4.12.12",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
-    "vite": "^6.3.5",
+    "@types/node": "^20.14.0",
     "tsx": "^4.16.0",
-    "@types/node": "^20.14.0"
+    "vite": "^6.3.5"
   }
 }

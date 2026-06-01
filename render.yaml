@@ -18,4 +18,8 @@ services:
       - key: CF_R2_BUCKET
         value: jochu-kokuban-files
       - key: VAPID_PUBLIC_KEY
-        sync: false
+        value: BOdrGrXjDIDoIfnauxSRkTiLBgPOfKuvYXzM_l_LjR5_c88gy83c2jmMaRqCdwgV7ZvCh2XtyoMd9jRaooSA0Tg
+      - key: VAPID_PRIVATE_KEY
+        value: SA78JINHlUYXu4m-QIJ8PV8cOaVa1qhbIor4DarHSss
+      - key: VAPID_SUBJECT
+        value: mailto:admin@example.com

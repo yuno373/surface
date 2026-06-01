@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { getCookie } from 'hono/cookie'
+import webpush from 'web-push'
 
 type Bindings = { DB: any }
 const admin = new Hono<{ Bindings: Bindings }>()
@@ -484,13 +485,27 @@ admin.post('/notifications/broadcast', async (c) => {
   const { title, body, type } = await c.req.json()
   const allUsers = await c.env.DB.prepare('SELECT id FROM users').all<any>()
 
+  // Get all users with push subscriptions
+  const pushUsers = await c.env.DB.prepare(
+    "SELECT user_id, push_subscription FROM notification_settings WHERE push_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
+  ).all<any>()
+
+  let pushSent = 0
+  for (const pu of pushUsers.results) {
+    try {
+      const sub = JSON.parse(pu.push_subscription)
+      await webpush.sendNotification(sub, JSON.stringify({ title, body, type: type || 'normal' }))
+      pushSent++
+    } catch { /* skip failed sends */ }
+  }
+
   for (const u of allUsers.results) {
     await c.env.DB.prepare(
       'INSERT INTO notifications (user_id, type, title, body, created_by) VALUES (?, ?, ?, ?, ?)'
     ).bind(u.id, type || 'normal', title, body, user.id).run()
   }
 
-  return c.json({ success: true, sent: allUsers.results.length })
+  return c.json({ success: true, sent: allUsers.results.length, pushSent })
 })
 
 // 自分通知一覧
