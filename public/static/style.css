@@ -1,4 +1,5 @@
 /* 上中黒板 スタイル */
+.hidden { display: none !important; }
 
 :root {
   --primary: #2d6a4f;

@@ -247,9 +247,7 @@ const indexHtml = `<!DOCTYPE html>
 
 <div id="toast-container" class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none"></div>
 
-<script>console.log('inline script OK');</script>
 <script src="/static/app.js?v=3"></script>
-<script>console.log('app.js loaded, doLogin:', typeof doLogin);</script>
 </body>
 </html>`
 
