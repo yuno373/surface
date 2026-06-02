@@ -166,8 +166,10 @@ body { font-family: 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif; }
 .drawer.open { right: 0; }
 
 /* 防災バー */
+#disaster-bar.level5 { background: #4a0e4e !important; animation: pulse-red 1s infinite; }
 #disaster-bar.level4 { background: #c0392b !important; animation: pulse-red 1s infinite; }
 #disaster-bar.level3 { background: #e67e22 !important; }
+#disaster-bar.level2 { background: #f1c40f !important; color: #333 !important; }
 @keyframes pulse-red {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.85; }

@@ -114,26 +114,25 @@ app.get('/api/wbgt', async (c) => {
   return c.json({ wbgt: null, level: null, alert: null })
 })
 
-// 気象庁警報コード→日本語
-const JMA_WARNINGS: Record<string, string> = {'02':'暴風雪警報','03':'大雨警報','04':'洪水警報','05':'暴風警報','06':'大雪警報','07':'波浪警報','08':'高潮警報','10':'大雨注意報','12':'大雪注意報','13':'風雪注意報','14':'雷注意報','15':'強風注意報','16':'波浪注意報','17':'融雪注意報','18':'洪水注意報','20':'濃霧注意報','21':'乾燥注意報','22':'なだれ注意報','23':'低温注意報','24':'霜注意報','25':'着氷注意報','26':'着雪注意報'}
+// 気象庁警報コード→日本語(レベル)
+const JMA_WARNINGS: Record<string, string> = {'08':'高潮警報','07':'波浪警報','06':'大雪警報','05':'暴風警報','02':'暴風雪警報','03':'大雨警報','04':'洪水警報','10':'大雨注意報','18':'洪水注意報','15':'強風注意報','16':'波浪注意報','14':'雷注意報','13':'風雪注意報','12':'大雪注意報','20':'濃霧注意報','21':'乾燥注意報','22':'なだれ注意報','23':'低温注意報','24':'霜注意報','25':'着氷注意報','26':'着雪注意報','17':'融雪注意報'}
+const WARN_LEVEL = (c: string) => ['08','07','06','05','02','03','04'].includes(c) ? 4 : ['10','18','15','16','14','13','12','20','21','22','23','24','25','26','17'].includes(c) ? 2 : 3
 
 // 現在の防災情報を取得（DB通知 + 気象庁自動警報＋予報）
 app.get('/api/disaster/current', async (c) => {
-  let jma: { title: string; severity: string } | null = null
-  let forecast: { title: string; severity: string } | null = null
+  let jma: { title: string; level: number } | null = null
+  let forecast: { title: string; level: number } | null = null
   // 1. 気象庁警報API
   try {
     const resp = await fetch('https://www.jma.go.jp/bosai/warning/data/warning/110000.json', { signal: AbortSignal.timeout(5000) })
     if (resp.ok) {
       const data = await resp.json() as any
-      const warnings: { label: string; code: string }[] = []
+      const warnings: { label: string; code: string; level: number }[] = []
       for (const at of (data?.areaTypes || [])) {
         for (const area of (at?.areas || [])) {
           if (area.code === '110010') {
             for (const w of (area.warnings || [])) {
-              if (w.code && JMA_WARNINGS[w.code]) {
-                warnings.push({ label: JMA_WARNINGS[w.code], code: w.code })
-              }
+              if (w.code && JMA_WARNINGS[w.code]) warnings.push({ label: JMA_WARNINGS[w.code], code: w.code, level: WARN_LEVEL(w.code) })
             }
           }
         }
@@ -141,8 +140,8 @@ app.get('/api/disaster/current', async (c) => {
       const severityOrder = ['08','07','06','05','02','03','04','10','18','15','16','14','20','21','22','23','24','25','26']
       warnings.sort((a, b) => severityOrder.indexOf(a.code) - severityOrder.indexOf(b.code))
       if (warnings.length > 0) {
-        const hasAlert = warnings.some(w => ['02','03','04','05','06','07','08'].includes(w.code))
-        jma = { title: warnings.map(w => w.label).join('、'), severity: hasAlert ? 'alert' : 'advisory' }
+        const maxLevel = Math.max(...warnings.map(w => w.level))
+        jma = { title: warnings.map(w => w.label).join('、'), level: maxLevel }
       }
     }
   } catch {}
@@ -151,27 +150,26 @@ app.get('/api/disaster/current', async (c) => {
     const fResp = await fetch('https://www.jma.go.jp/bosai/forecast/data/forecast/110000.json', { signal: AbortSignal.timeout(5000) })
     if (fResp.ok) {
       const fData = await fResp.json() as any
-      const today = new Date().toISOString().slice(0, 10)
       const heavyRain: string[] = []
+      let maxFLevel = 0
       for (const report of fData || []) {
         for (const ts of (report?.timeSeries || [])) {
           for (const area of (ts?.areas || [])) {
             if (area.area?.code === '110010' && area.pops) {
-              if (parseInt(area.pops[0]) >= 80) heavyRain.push('大雨(降水確率' + area.pops[0] + '%)')
+              if (parseInt(area.pops[0]) >= 80) { heavyRain.push('大雨(降水確率' + area.pops[0] + '%)'); maxFLevel = Math.max(maxFLevel, 2) }
             }
             if (area.area?.code === '110010' && area.weathers) {
               const w = area.weathers[0] || ''
               if (w.includes('激しく') || w.includes('非常に') || w.includes('雷')) {
-                if (!heavyRain.includes('大雨(降水確率' + area.pops?.[0] + '%)')) heavyRain.push('大雨注意')
+                if (!heavyRain.some(h => h.startsWith('大雨'))) heavyRain.push('大雨注意')
+                maxFLevel = Math.max(maxFLevel, 2)
               }
-              if (w.includes('強風') || w.includes('暴風')) heavyRain.push('強風注意')
+              if (w.includes('強風') || w.includes('暴風')) { heavyRain.push('強風注意'); maxFLevel = Math.max(maxFLevel, 2) }
             }
           }
         }
       }
-      if (heavyRain.length > 0) {
-        forecast = { title: heavyRain.join('、'), severity: 'advisory' }
-      }
+      if (heavyRain.length > 0) forecast = { title: heavyRain.join('、'), level: maxFLevel }
     }
   } catch {}
   // 3. DBの管理者防災通知
@@ -183,11 +181,11 @@ app.get('/api/disaster/current', async (c) => {
   } catch {}
   // マージ
   const parts: string[] = []
-  let sev = 'none'
-  if (jma) { parts.push(jma.title); sev = jma.severity === 'alert' ? 'alert' : sev === 'none' ? 'advisory' : sev }
-  if (forecast && !jma) { parts.push(forecast.title); sev = 'advisory' }
+  let level = 0
+  if (jma) { parts.push(jma.title); level = Math.max(level, jma.level) }
+  if (forecast && !jma) { parts.push(forecast.title); level = Math.max(level, forecast.level) }
   if (db) parts.push((db.title || '') + (db.body ? ': ' + db.body : ''))
-  return c.json({ title: parts.length > 0 ? parts.join(' | ') : null, severity: sev })
+  return c.json({ title: parts.length > 0 ? parts.join(' | ') : null, level })
 })
 
 const distDir = process.cwd() + '/dist'
