@@ -211,52 +211,56 @@ surveys.get('/:id/results', async (c) => {
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
-  const id = parseInt(c.req.param('id'))
-  const survey = await c.env.DB.prepare('SELECT * FROM surveys WHERE id = ?').bind(id).first<any>()
-  if (!survey) return c.json({ error: 'Not found' }, 404)
+  try {
+    const id = parseInt(c.req.param('id'))
+    const survey = await c.env.DB.prepare('SELECT * FROM surveys WHERE id = ?').bind(id).first<any>()
+    if (!survey) return c.json({ error: 'Not found' }, 404)
 
-  const questions = await c.env.DB.prepare(
-    'SELECT * FROM survey_questions WHERE survey_id = ? ORDER BY order_num ASC'
-  ).bind(id).all<any>()
+    const questions = await c.env.DB.prepare(
+      'SELECT * FROM survey_questions WHERE survey_id = ? ORDER BY order_num ASC'
+    ).bind(id).all<any>()
 
-  const results: any[] = []
-  for (const q of questions.results) {
-    if (q.question_type === 'text') {
-      const answers = await c.env.DB.prepare(
-        'SELECT sa.answer, u.name as user_name, u.id as user_id FROM survey_answers sa JOIN users u ON sa.user_id = u.id WHERE sa.question_id = ? ORDER BY sa.created_at ASC'
-      ).bind(q.id).all<any>()
-      results.push({ question: q, answers: answers.results, total: answers.results.length })
-    } else {
-      const answers = await c.env.DB.prepare(
-        'SELECT sa.answer, COUNT(*) as cnt FROM survey_answers WHERE question_id = ? GROUP BY sa.answer ORDER BY cnt DESC'
-      ).bind(q.id).all<any>()
-      const voters = await c.env.DB.prepare(
-        'SELECT sa.answer, u.name as user_name, u.id as user_id FROM survey_answers sa JOIN users u ON sa.user_id = u.id WHERE sa.question_id = ? ORDER BY sa.answer, u.name'
-      ).bind(q.id).all<any>()
-      const votersByAnswer: Record<string, { user_name: string; user_id: number }[]> = {}
-      for (const v of voters.results) {
-        const key = typeof v.answer === 'string' ? v.answer : JSON.stringify(v.answer)
-        if (!votersByAnswer[key]) votersByAnswer[key] = []
-        votersByAnswer[key].push({ user_name: v.user_name, user_id: v.user_id })
+    const results: any[] = []
+    for (const q of questions.results) {
+      if (q.question_type === 'text') {
+        const answers = await c.env.DB.prepare(
+          'SELECT sa.answer, u.name as user_name, u.id as user_id FROM survey_answers sa JOIN users u ON sa.user_id = u.id WHERE sa.question_id = ? ORDER BY sa.created_at ASC'
+        ).bind(q.id).all<any>()
+        results.push({ question: q, answers: answers.results, total: answers.results.length })
+      } else {
+        const answers = await c.env.DB.prepare(
+          'SELECT sa.answer, COUNT(*) as cnt FROM survey_answers WHERE question_id = ? GROUP BY sa.answer ORDER BY cnt DESC'
+        ).bind(q.id).all<any>()
+        const voters = await c.env.DB.prepare(
+          'SELECT sa.answer, u.name as user_name, u.id as user_id FROM survey_answers sa JOIN users u ON sa.user_id = u.id WHERE sa.question_id = ? ORDER BY sa.answer, u.name'
+        ).bind(q.id).all<any>()
+        const votersByAnswer: Record<string, { user_name: string; user_id: number }[]> = {}
+        for (const v of voters.results) {
+          const key = typeof v.answer === 'string' ? v.answer : JSON.stringify(v.answer)
+          if (!votersByAnswer[key]) votersByAnswer[key] = []
+          votersByAnswer[key].push({ user_name: v.user_name, user_id: v.user_id })
+        }
+        const total = answers.results.reduce((sum: number, a: any) => sum + a.cnt, 0)
+        results.push({
+          question: q,
+          answers: answers.results.map((a: any) => ({ ...a, voters: votersByAnswer[a.answer] || [] })),
+          total
+        })
       }
-      const total = answers.results.reduce((sum: number, a: any) => sum + a.cnt, 0)
-      results.push({
-        question: q,
-        answers: answers.results.map((a: any) => ({ ...a, voters: votersByAnswer[a.answer] || [] })),
-        total
-      })
     }
+
+    const totalRespondents = await c.env.DB.prepare(
+      'SELECT COUNT(DISTINCT user_id) as cnt FROM survey_answers WHERE survey_id = ?'
+    ).bind(id).first<any>()
+
+    return c.json({
+      survey,
+      results,
+      totalRespondents: totalRespondents?.cnt || 0
+    })
+  } catch (e: any) {
+    return c.json({ error: '集計失敗: ' + (e.message || e) }, 500)
   }
-
-  const totalRespondents = await c.env.DB.prepare(
-    'SELECT COUNT(DISTINCT user_id) as cnt FROM survey_answers WHERE survey_id = ?'
-  ).bind(id).first<any>()
-
-  return c.json({
-    survey,
-    results,
-    totalRespondents: totalRespondents?.cnt || 0
-  })
 })
 
 export default surveys
