@@ -230,7 +230,7 @@ body { font-family: 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif; }
 
 /* チェックリスト */
 .checklist-item {
-  display: flex; align-items: center; gap-12px; padding: 10px 14px;
+  display: flex; align-items: center; gap: 12px; padding: 10px 14px;
   border-bottom: 1px solid #f0f4f8;
 }
 
