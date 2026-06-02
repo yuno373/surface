@@ -771,6 +771,8 @@ async function testPush(){try{const r=await api('/api/admin/notifications/test',
 
 let _lastNotifId = 0
 let _lastNotifInit = false
+function getLastReadNotifId() { return parseInt(localStorage.getItem('lastReadNotifId') || '0') }
+function setLastReadNotifId(id) { localStorage.setItem('lastReadNotifId', String(id)) }
 async function pollNotifications() {
   try {
     const list = await api('/api/auth/notifications')
@@ -790,9 +792,9 @@ async function pollNotifications() {
   setTimeout(pollNotifications, 30000)
 }
 
-async function loadNotifications(){const c=document.getElementById('notif-list');if(!c)return;try{const r=await api('/api/auth/notifications');if(!r.notifications.length){c.innerHTML='<div class="empty-state"><i class="fas fa-bell-slash"></i><p>通知はありません</p></div>';updateNotifBadge();return;}c.innerHTML=r.notifications.map(n=>'<div class="card p-4 mb-2 flex items-start gap-3'+(n.is_read?'':' cursor-pointer')+'"'+(n.is_read?'':' onclick="markNotifRead('+n.id+')"')+'><div class="w-8 h-8 rounded-full '+(n.is_read?'bg-gray-200':'bg-blue-100')+' flex items-center justify-center text-sm"><i class="fas '+(n.icon||'fa-bell')+' text-blue-600"></i></div><div class="flex-1"><p class="text-sm '+(n.is_read?'text-gray-500':'text-gray-800 font-semibold')+'">'+esc(n.title||n.message||n.body||'')+'</p><span class="text-xs text-gray-400">'+formatRelative(n.created_at)+'</span></div></div>').join('');updateNotifBadge();}catch{}}
+async function loadNotifications(){const c=document.getElementById('notif-list');if(!c)return;try{const r=await api('/api/auth/notifications');if(!r.notifications.length){c.innerHTML='<div class="empty-state"><i class="fas fa-bell-slash"></i><p>通知はありません</p></div>';updateNotifBadge();return;}c.innerHTML=r.notifications.map(n=>'<div class="card p-4 mb-2 flex items-start gap-3'+(n.id>getLastReadNotifId()?' cursor-pointer':'')+'"'+(n.id>getLastReadNotifId()?' onclick="markNotifRead('+n.id+')"':'')+' data-nid="'+n.id+'"><div class="w-8 h-8 rounded-full '+(n.id>getLastReadNotifId()?'bg-blue-100':'bg-gray-200')+' flex items-center justify-center text-sm"><i class="fas '+(n.icon||'fa-bell')+' text-blue-600"></i></div><div class="flex-1"><p class="text-sm '+(n.id>getLastReadNotifId()?'text-gray-800 font-semibold':'text-gray-500')+'">'+esc(n.title||n.message||n.body||'')+'</p><span class="text-xs text-gray-400">'+formatRelative(n.created_at)+'</span></div></div>').join('');updateNotifBadge()}catch{}}
 
-async function markNotifRead(id){try{await api('/api/auth/notifications/'+id+'/read',{method:'POST'});loadNotifications();updateNotifBadge();}catch{}}
+async function markNotifRead(id){setLastReadNotifId(id);loadNotifications();updateNotifBadge();try{await api('/api/auth/notifications/'+id+'/read',{method:'POST'})}catch{}setLastReadNotifId(id)}
 
 function esc(str){if(!str)return '';return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}
 
@@ -816,5 +818,6 @@ function logout(){fetch('/api/auth/logout',{method:'POST',credentials:'include'}
 async function fetchWBGT(){try{const r=await api('/api/wbgt');const el=document.getElementById('wbgt-text');if(el){if(r.wbgt){const levelMap={'危険':'text-red-300','厳重警戒':'text-yellow-300','警戒':'text-yellow-200','注意':'text-green-200'};el.innerHTML='WBGT: <strong>'+r.wbgt+'°C</strong> <span class="'+(levelMap[r.level]||'')+'">('+r.level+')</span>'+(r.alert?' <span class="text-yellow-200">⚠'+r.alert+'</span>':'')+' | 気温'+r.temp+'°C 湿度'+r.humidity+'%';}else{el.textContent='気象情報取得中...';}}}catch{const el=document.getElementById('wbgt-text');if(el)el.textContent='気象情報取得失敗';}}
 
 async function fetchUnreadCount(){try{const r=await api('/api/messages/unread-count');const badge=document.getElementById('msg-badge');if(badge){badge.textContent=r.count>0?(r.count>99?'99+':r.count):'';badge.classList.toggle('hidden',r.count===0);}}catch{}}
-async function updateNotifBadge(){try{const r=await api('/api/auth/notifications/unread-count');const badge=document.getElementById('notif-badge');if(badge){if(r.count>0){badge.textContent=r.count>99?'99+':r.count;badge.classList.remove('hidden')}else badge.classList.add('hidden')}}catch{}}
+async function updateNotifBadge(){try{const r=await api('/api/auth/notifications');const lastRead=getLastReadNotifId();const unread=(r.notifications||[]).filter(n=>n.id>lastRead).length;const badge=document.getElementById('notif-badge');if(badge){if(unread>0){badge.textContent=unread>99?'99+':unread;badge.classList.remove('hidden')}else badge.classList.add('hidden')}}catch{}}
+function markAllNotifRead(){const el=document.getElementById('notif-list');if(!el)return;const ids=(el.querySelectorAll('[onclick^=markNotifRead]')||[]).length;const r=document.querySelectorAll('#notif-list .cursor-pointer');r.forEach(n=>{n.classList.remove('cursor-pointer');n.removeAttribute('onclick');});const max=Array.from(document.querySelectorAll('#notif-list .card')).reduce((m,c)=>{const m2=parseInt(c.getAttribute('data-nid')||'0');return m2>m?m2:m;},0);if(max>getLastReadNotifId())setLastReadNotifId(max);updateNotifBadge();}
 
