@@ -32,7 +32,7 @@ async function runMigrations() {
     const chk = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${dbId}/query`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sql: "PRAGMA table_info(survey_answers)" })
+      body: JSON.stringify({ sql: "PRAGMA table_info(survey_answers)", params: [] })
     })
     const chkData = await chk.json() as any
     const hasAnswer = chkData?.result?.[0]?.results?.some((r: any) => r.name === 'answer')
@@ -40,7 +40,7 @@ async function runMigrations() {
       await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${dbId}/query`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sql: "ALTER TABLE survey_answers ADD COLUMN answer TEXT DEFAULT ''" })
+        body: JSON.stringify({ sql: "ALTER TABLE survey_answers ADD COLUMN answer TEXT DEFAULT ''", params: [] })
       })
     }
   } catch {}

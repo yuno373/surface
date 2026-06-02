@@ -34,8 +34,7 @@ class D1Statement {
 async function query(sql: string, params: any[]) {
   const { accountId, dbId, apiToken } = getConfig()
   const url = `${CF_API_BASE}/accounts/${accountId}/d1/database/${dbId}/query`
-  const body: any = { sql }
-  if (params.length > 0) body.params = params
+  const body: any = { sql, params }
 
   const resp = await fetch(url, {
     method: 'POST',
