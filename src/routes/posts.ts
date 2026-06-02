@@ -147,32 +147,38 @@ posts.post('/', async (c) => {
 
   const newPost = await c.env.DB.prepare('SELECT last_insert_rowid() as id').first<any>()
 
-  // プッシュ通知を送信
+  // DB通知レコード＋プッシュ通知を送信
   try {
     const notifMessage = title || content
-    let pushUsers: any[] = []
+    const notifType = category + (target ? ':' + target : '')
+    let targetUsers: any[] = []
     if (category === 'school_notice') {
-      pushUsers = (await c.env.DB.prepare(
-        "SELECT ns.push_subscription FROM notification_settings ns WHERE ns.school_notice_enabled = 1 AND ns.push_subscription IS NOT NULL AND ns.push_subscription != ''"
-      ).all<any>()).results
+      targetUsers = (await c.env.DB.prepare("SELECT id FROM users").all<any>()).results
     } else if ((category === 'club' || category === 'committee') && target) {
-      pushUsers = (await c.env.DB.prepare(
-        `SELECT ns.push_subscription FROM notification_settings ns JOIN users u ON ns.user_id = u.id WHERE ns.push_enabled = 1 AND ns.push_subscription IS NOT NULL AND ns.push_subscription != '' AND u.${category} = ?`
-      ).bind(target).all<any>()).results
+      targetUsers = (await c.env.DB.prepare(`SELECT id FROM users WHERE ${category} = ?`).bind(target).all<any>()).results
     }
-    if (pushUsers.length > 0 && vapidPublicKey) {
-      const pushPayload = JSON.stringify({ title: '上中黒板', body: notifMessage, type: 'post' })
-      Promise.allSettled(pushUsers.map(pu => {
-        const subs: any[] = []
-        try {
-          const parsed = JSON.parse(pu.push_subscription)
-          if (Array.isArray(parsed)) subs.push(...parsed)
-          else subs.push(parsed)
-        } catch { return Promise.resolve() }
-        return Promise.allSettled(subs.map(sub =>
-          webpush.sendNotification(sub, pushPayload).catch(() => {})
-        ))
-      })).catch(() => {})
+    if (targetUsers.length > 0) {
+      Promise.all(targetUsers.map(u =>
+        c.env.DB.prepare('INSERT INTO notifications (user_id, type, title, body, created_by) VALUES (?, ?, ?, ?, ?)').bind(u.id, notifType, notifMessage, '', user.id).run()
+      )).catch(() => {})
+    }
+    if (vapidPublicKey) {
+      let pushSql: string|undefined, pushParams: any[] = []
+      if (category === 'school_notice') {
+        pushSql = "SELECT push_subscription FROM notification_settings WHERE school_notice_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
+      } else if ((category === 'club' || category === 'committee') && target) {
+        pushSql = `SELECT ns.push_subscription FROM notification_settings ns JOIN users u ON ns.user_id = u.id WHERE ns.${category}_post_enabled = 1 AND ns.push_subscription IS NOT NULL AND ns.push_subscription != '' AND u.${category} = ?`
+        pushParams = [target]
+      }
+      if (pushSql) {
+        const pushRows = await c.env.DB.prepare(pushSql).bind(...pushParams).all<any>()
+        const pushPayload = JSON.stringify({ title: '上中黒板', body: notifMessage, type: 'post' })
+        Promise.allSettled(pushRows.results.map(pu => {
+          const subs: any[] = []
+          try { const parsed = JSON.parse(pu.push_subscription); if (Array.isArray(parsed)) subs.push(...parsed); else subs.push(parsed) } catch { return Promise.resolve() }
+          return Promise.allSettled(subs.map(sub => webpush.sendNotification(sub, pushPayload).catch(() => {})))
+        })).catch(() => {})
+      }
     }
   } catch {}
 
