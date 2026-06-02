@@ -34,7 +34,8 @@ class D1Statement {
 async function query(sql: string, params: any[]) {
   const { accountId, dbId, apiToken } = getConfig()
   const url = `${CF_API_BASE}/accounts/${accountId}/d1/database/${dbId}/query`
-  const body = params.length > 0 ? [{ sql, params }] : [{ sql }]
+  const body: any = { sql }
+  if (params.length > 0) body.params = params
 
   const resp = await fetch(url, {
     method: 'POST',
@@ -53,7 +54,6 @@ async function query(sql: string, params: any[]) {
     const errs = data.errors?.map((e: any) => e.message).join(', ') || 'unknown error'
     throw new Error(`D1 query failed: ${errs}`)
   }
-  // data.result is an array of per-statement results
   const result = data.result?.[0]
   if (result?.error) throw new Error(`D1 query error: ${result.error}`)
   return result
