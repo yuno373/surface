@@ -532,8 +532,13 @@ admin.post('/notifications/test', async (c) => {
         return statusCode + msg
       }).join(' | ')
     }
-    const endpoint = (JSON.parse(subRow.push_subscription).endpoint || '').replace(/[?&].*$/,'').substring(0,120)
-    return c.json({ error: 'プッシュ送信失敗: ' + detail, endpoint })
+    const endpoint = (JSON.parse(subRow.push_subscription).endpoint || '')
+    // 接続エラーなら購読をリセット
+    if (detail.includes('ETIMEDOUT') || detail.includes('ENETUNREACH') || detail.includes('ECONNREFUSED')) {
+      await c.env.DB.prepare("UPDATE notification_settings SET push_subscription = NULL, push_enabled = 0 WHERE user_id = ?").bind(user.id).run()
+      return c.json({ error: 'プッシュ通知サービスに接続できませんでした。購読をリセットしました。通知設定から再度オンにしてください', endpoint: endpoint.replace(/[?&].*$/,'').substring(0,120) })
+    }
+    return c.json({ error: 'プッシュ送信失敗: ' + detail, endpoint: endpoint.replace(/[?&].*$/,'').substring(0,120) })
   }
 })
 
