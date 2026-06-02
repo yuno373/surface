@@ -114,15 +114,49 @@ app.get('/api/wbgt', async (c) => {
   return c.json({ wbgt: null, level: null, alert: null })
 })
 
-// 現在の防災情報を取得
+// 気象庁警報コード→日本語
+const JMA_WARNINGS: Record<string, string> = {'02':'暴風雪警報','03':'大雨警報','04':'洪水警報','05':'暴風警報','06':'大雪警報','07':'波浪警報','08':'高潮警報','10':'大雨注意報','12':'大雪注意報','13':'風雪注意報','14':'雷注意報','15':'強風注意報','16':'波浪注意報','17':'融雪注意報','18':'洪水注意報','20':'濃霧注意報','21':'乾燥注意報','22':'なだれ注意報','23':'低温注意報','24':'霜注意報','25':'着氷注意報','26':'着雪注意報'}
+
+// 現在の防災情報を取得（DB通知 + 気象庁自動警報）
 app.get('/api/disaster/current', async (c) => {
+  let jma: { title: string; severity: string } | null = null
   try {
-    const latest = await c.env.DB.prepare(
+    const resp = await fetch('https://www.jma.go.jp/bosai/warning/data/warning/130000.json', { signal: AbortSignal.timeout(5000) })
+    if (resp.ok) {
+      const data = await resp.json() as any
+      const warnings: { label: string; code: string }[] = []
+      for (const at of (data?.areaTypes || [])) {
+        for (const area of (at?.areas || [])) {
+          if (area.code === '130010') { // 東京地方
+            for (const w of (area.warnings || [])) {
+              if (w.code && JMA_WARNINGS[w.code]) {
+                warnings.push({ label: JMA_WARNINGS[w.code], code: w.code })
+              }
+            }
+          }
+        }
+      }
+      const severityOrder = ['08','07','06','05','02','03','04','10','18','15','16','14','20','21','22','23','24','25','26']
+      warnings.sort((a, b) => severityOrder.indexOf(a.code) - severityOrder.indexOf(b.code))
+      if (warnings.length > 0) {
+        const hasAlert = warnings.some(w => ['02','03','04','05','06','07','08'].includes(w.code))
+        jma = { title: '⚠ ' + warnings.map(w => w.label).join('、'), severity: hasAlert ? 'alert' : 'advisory' }
+      } else if (data?.headlineText) {
+        jma = { title: data.headlineText, severity: 'info' }
+      }
+    }
+  } catch {}
+  // DBの管理者防災通知とマージ
+  let db: any = null
+  try {
+    db = await c.env.DB.prepare(
       "SELECT title, body, created_at FROM notifications WHERE type LIKE '%disaster%' OR type LIKE '%災害%' ORDER BY created_at DESC LIMIT 1"
     ).first<any>()
-    if (latest) return c.json({ title: latest.title, body: latest.body, time: latest.created_at })
   } catch {}
-  return c.json({ title: null })
+  const parts: string[] = []
+  if (jma) parts.push(jma.title)
+  if (db) parts.push((db.title || '') + (db.body ? ': ' + db.body : ''))
+  return c.json({ title: parts.length > 0 ? parts.join(' | ') : null, severity: jma?.severity || 'none' })
 })
 
 const distDir = process.cwd() + '/dist'
