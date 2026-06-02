@@ -524,16 +524,26 @@ admin.post('/notifications/test', async (c) => {
     await webpush.sendNotification(sub, JSON.stringify({ title: 'テスト通知', body: 'プッシュ通知は正常に動作しています', type: 'normal' }))
     return c.json({ success: true, message: 'プッシュ通知を送信しました' })
   } catch (e: any) {
-    let detail = e.message || String(e)
+    let detail = ''
+    let sc = null
     if (e.errors && Array.isArray(e.errors)) {
       detail = e.errors.map((err: any) => {
-        const statusCode = err.statusCode ? `[${err.statusCode}]` : ''
+        sc = sc || err.statusCode
+        const s = err.statusCode ? `[${err.statusCode}]` : ''
         const msg = err.body || err.message || String(err)
-        return statusCode + msg
+        return s + msg
       }).join(' | ')
+    } else if (e.statusCode) {
+      sc = e.statusCode
+      detail = `[${e.statusCode}] ` + (e.body || e.message || '')
+    } else {
+      detail = e.message || String(e)
     }
-    const endpoint = (JSON.parse(subRow.push_subscription).endpoint || '')
-    return c.json({ error: 'プッシュ送信失敗: ' + detail, endpoint: endpoint.replace(/[?&].*$/,'').substring(0,120) })
+    if (sc === 401 || sc === 403 || sc === 410) {
+      await c.env.DB.prepare("UPDATE notification_settings SET push_subscription = NULL, push_enabled = 0 WHERE user_id = ?").bind(user.id).run()
+    }
+    const ep = (JSON.parse(subRow.push_subscription).endpoint || '').replace(/[?&].*$/,'').substring(0,120)
+    return c.json({ error: 'プッシュ送信失敗: ' + detail + (sc===401||sc===403||sc===410?' 購読期限切れのためリセットしました。設定から再度オンにしてください':''), endpoint: ep })
   }
 })
 
