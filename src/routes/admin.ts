@@ -523,7 +523,11 @@ admin.post('/notifications/test', async (c) => {
     await webpush.sendNotification(sub, JSON.stringify({ title: 'テスト通知', body: 'プッシュ通知は正常に動作しています', type: 'normal' }))
     return c.json({ success: true, message: 'プッシュ通知を送信しました' })
   } catch (e: any) {
-    return c.json({ error: 'プッシュ送信失敗: ' + (e.message || e) })
+    let detail = e.message || String(e)
+    if (e.errors && Array.isArray(e.errors)) {
+      detail = e.errors.map((err: any) => err.message || err).join('; ')
+    }
+    return c.json({ error: 'プッシュ送信失敗: ' + detail })
   }
 })
 
