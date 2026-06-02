@@ -508,6 +508,25 @@ admin.post('/notifications/broadcast', async (c) => {
   return c.json({ success: true, sent: allUsers.results.length, pushSent })
 })
 
+// プッシュ通知テスト送信
+admin.post('/notifications/test', async (c) => {
+  const user = await getUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+
+  const subRow = await c.env.DB.prepare(
+    "SELECT push_subscription FROM notification_settings WHERE user_id = ? AND push_subscription IS NOT NULL AND push_subscription != ''"
+  ).bind(user.id).first<any>()
+  if (!subRow) return c.json({ error: '購読データがありません。通知をオンにしてください' })
+
+  try {
+    const sub = JSON.parse(subRow.push_subscription)
+    await webpush.sendNotification(sub, JSON.stringify({ title: 'テスト通知', body: 'プッシュ通知は正常に動作しています', type: 'normal' }))
+    return c.json({ success: true, message: 'プッシュ通知を送信しました' })
+  } catch (e: any) {
+    return c.json({ error: 'プッシュ送信失敗: ' + (e.message || e) })
+  }
+})
+
 // 自分通知一覧
 admin.get('/notifications/self', async (c) => {
   const user = await getUser(c)
