@@ -83,7 +83,7 @@ if (vapidPublicKey && vapidPrivateKey) {
 app.get('/api/wbgt', async (c) => {
   try {
     const resp = await fetch(
-      'https://api.open-meteo.com/v1/forecast?latitude=35.6762&longitude=139.6503&current=temperature_2m,relative_humidity_2m,weather_code',
+      'https://api.open-meteo.com/v1/forecast?latitude=35.8397&longitude=139.3912&current=temperature_2m,relative_humidity_2m,weather_code',
       { signal: AbortSignal.timeout(5000) }
     )
     if (resp.ok) {
@@ -127,7 +127,7 @@ app.get('/api/disaster/current', async (c) => {
       const warnings: { label: string; code: string }[] = []
       for (const at of (data?.areaTypes || [])) {
         for (const area of (at?.areas || [])) {
-          if (area.code === '130010') { // 東京地方
+          if (area.code === '110010') { // 埼玉県南部（入間市含む）
             for (const w of (area.warnings || [])) {
               if (w.code && JMA_WARNINGS[w.code]) {
                 warnings.push({ label: JMA_WARNINGS[w.code], code: w.code })
