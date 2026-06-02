@@ -520,6 +520,7 @@ admin.post('/notifications/test', async (c) => {
 
   try {
     const sub = JSON.parse(subRow.push_subscription)
+    const endpoint = sub.endpoint || 'なし'
     await webpush.sendNotification(sub, JSON.stringify({ title: 'テスト通知', body: 'プッシュ通知は正常に動作しています', type: 'normal' }))
     return c.json({ success: true, message: 'プッシュ通知を送信しました' })
   } catch (e: any) {
@@ -531,7 +532,8 @@ admin.post('/notifications/test', async (c) => {
         return statusCode + msg
       }).join(' | ')
     }
-    return c.json({ error: 'プッシュ送信失敗: ' + detail })
+    const endpoint = (JSON.parse(subRow.push_subscription).endpoint || '').replace(/[?&].*$/,'').substring(0,120)
+    return c.json({ error: 'プッシュ送信失敗: ' + detail, endpoint })
   }
 })
 
