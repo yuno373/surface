@@ -95,6 +95,7 @@ function showApp() {
   updateHeader(); buildNav(); loadInfoBar(); startTimers(); startClock();
   navigateTo(getDefaultTab());
   checkPushSetting();
+  pollNotifications();
 }
 
 function getDefaultTab() { const t=getVisibleTabs(); return t[0]?.id||'bulletin'; }
@@ -764,9 +765,33 @@ async function submitSelfNotification(){const msg=document.getElementById('self-
 async function deleteSelfNotif(id){try{const r=await api('/api/notifications/'+id+'/read',{method:'POST'});loadSelfNotifications();}catch{}}
 async function testPush(){try{const r=await api('/api/admin/notifications/test',{method:'POST'});if(r.error){toast(r.error+(r.endpoint?' ['+r.endpoint+']':''),'error');return;}toast(r.message,'success');}catch(e){toast('失敗: '+(e.message||'エラー'),'error');}}
 
-async function loadNotifications(){const c=document.getElementById('notif-list');if(!c)return;try{const r=await api('/api/notifications');if(!r.notifications.length){c.innerHTML='<div class="empty-state"><i class="fas fa-bell-slash"></i><p>通知はありません</p></div>';return;}c.innerHTML=r.notifications.map(n=>'<div class="card p-4 mb-2 flex items-start gap-3"><div class="w-8 h-8 rounded-full '+(n.is_read?'bg-gray-200':'bg-blue-100')+' flex items-center justify-center text-sm"><i class="fas '+(n.icon||'fa-bell')+' text-blue-600"></i></div><div class="flex-1"><p class="text-sm '+(n.is_read?'text-gray-500':'text-gray-800 font-semibold')+'">'+esc(n.message)+'</p><span class="text-xs text-gray-400">'+formatRelative(n.created_at)+'</span></div>'+(n.is_read?'':'<button onclick="markNotifRead('+n.id+')" class="text-blue-600 text-xs hover:underline">既読</button>')+'</div>').join('');}catch{}}
+let _lastNotifId = 0
+async function pollNotifications() {
+  try {
+    const r = await api('/api/auth/notifications/unread-count')
+    if (r.count > 0) {
+      const badge = document.getElementById('notif-badge')
+      if (badge) { badge.textContent = r.count > 99 ? '99+' : r.count; badge.classList.remove('hidden') }
+      if (Notification.permission === 'granted') {
+        const list = await api('/api/auth/notifications')
+        for (const n of list.notifications || []) {
+          if (n.id > _lastNotifId && n.title) {
+            try { new Notification('上中黒板', { body: n.title, icon: '/icons/icon-192.png' }) } catch {}
+          }
+        }
+        if (list.notifications?.length) _lastNotifId = list.notifications[0].id
+      }
+    } else {
+      const badge = document.getElementById('notif-badge')
+      if (badge) badge.classList.add('hidden')
+    }
+  } catch {}
+  setTimeout(pollNotifications, 30000)
+}
 
-async function markNotifRead(id){try{await api('/api/notifications/'+id+'/read',{method:'POST'});loadNotifications();}catch{}}
+async function loadNotifications(){const c=document.getElementById('notif-list');if(!c)return;try{const r=await api('/api/auth/notifications');if(!r.notifications.length){c.innerHTML='<div class="empty-state"><i class="fas fa-bell-slash"></i><p>通知はありません</p></div>';return;}c.innerHTML=r.notifications.map(n=>'<div class="card p-4 mb-2 flex items-start gap-3"><div class="w-8 h-8 rounded-full '+(n.is_read?'bg-gray-200':'bg-blue-100')+' flex items-center justify-center text-sm"><i class="fas '+(n.icon||'fa-bell')+' text-blue-600"></i></div><div class="flex-1"><p class="text-sm '+(n.is_read?'text-gray-500':'text-gray-800 font-semibold')+'">'+esc(n.title||n.message||n.body||'')+'</p><span class="text-xs text-gray-400">'+formatRelative(n.created_at)+'</span></div>'+(n.is_read?'':'<button onclick="markNotifRead('+n.id+')" class="text-blue-600 text-xs hover:underline">既読</button>')+'</div>').join('');}catch{}}
+
+async function markNotifRead(id){try{await api('/api/auth/notifications/'+id+'/read',{method:'POST'});loadNotifications();}catch{}}
 
 function esc(str){if(!str)return '';return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}
 

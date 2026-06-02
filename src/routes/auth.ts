@@ -394,4 +394,64 @@ auth.post('/register', async (c) => {
   return c.json({ success: true })
 })
 
+// 通知一覧
+auth.get('/notifications', async (c) => {
+  const sessionId = getCookie(c, 'session')
+  if (!sessionId) return c.json({ error: 'Not authenticated' }, 401)
+  const session = await c.env.DB.prepare(
+    'SELECT * FROM sessions WHERE id = ? AND expires_at > datetime("now")'
+  ).bind(sessionId).first<any>()
+  if (!session) return c.json({ error: 'Session expired' }, 401)
+
+  const notifs = await c.env.DB.prepare(
+    "SELECT * FROM notifications WHERE user_id = ? AND type != 'self' ORDER BY created_at DESC LIMIT 50"
+  ).bind(session.user_id).all<any>()
+  return c.json({ notifications: notifs.results })
+})
+
+// 通知既読
+auth.post('/notifications/:id/read', async (c) => {
+  const sessionId = getCookie(c, 'session')
+  if (!sessionId) return c.json({ error: 'Not authenticated' }, 401)
+  const session = await c.env.DB.prepare(
+    'SELECT * FROM sessions WHERE id = ? AND expires_at > datetime("now")'
+  ).bind(sessionId).first<any>()
+  if (!session) return c.json({ error: 'Session expired' }, 401)
+
+  const id = parseInt(c.req.param('id'))
+  const notif = await c.env.DB.prepare('SELECT * FROM notifications WHERE id = ? AND user_id = ?').bind(id, session.user_id).first()
+  if (!notif) return c.json({ error: 'Not found' }, 404)
+
+  // notificationsテーブルにis_readカラムがなければ追加
+  const colInfo = await c.env.DB.prepare("PRAGMA table_info(notifications)").all<any>()
+  if (!colInfo.results.some((r: any) => r.name === 'is_read')) {
+    await c.env.DB.prepare("ALTER TABLE notifications ADD COLUMN is_read INTEGER DEFAULT 0").run().catch(() => {})
+  }
+
+  await c.env.DB.prepare("UPDATE notifications SET is_read = 1 WHERE id = ?").bind(id).run()
+  return c.json({ success: true, id })
+})
+
+// 未読通知数
+auth.get('/notifications/unread-count', async (c) => {
+  const sessionId = getCookie(c, 'session')
+  if (!sessionId) return c.json({ error: 'Not authenticated' }, 401)
+  const session = await c.env.DB.prepare(
+    'SELECT * FROM sessions WHERE id = ? AND expires_at > datetime("now")'
+  ).bind(sessionId).first<any>()
+  if (!session) return c.json({ error: 'Session expired' }, 401)
+
+  // is_readカラムがない場合は0を返す
+  let count = 0
+  try {
+    const r = await c.env.DB.prepare(
+      "SELECT COUNT(*) as cnt FROM notifications WHERE user_id = ? AND is_read = 0 AND (type IS NULL OR type != 'self')"
+    ).bind(session.user_id).first<any>()
+    count = r?.cnt || 0
+  } catch {
+    // is_readカラムがない場合
+  }
+  return c.json({ count })
+})
+
 export default auth
