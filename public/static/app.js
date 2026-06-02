@@ -218,6 +218,7 @@ function updateInfoBar() {}
 function startTimers() {
   notifCheckTimer=setInterval(fetchUnreadCount,30000);
   reloadTimer=setInterval(()=>{if(currentTab&&!window._peActive) renderTab(currentTab);},60000);
+  setInterval(fetchDisasterInfo,300000);
 }
 
 // === Committee ===
