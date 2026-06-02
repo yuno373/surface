@@ -111,12 +111,12 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   if (event.action === 'close') return;
   
-  const targetUrl = event.notification.data?.url || '/'
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/'
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clientList) => {
       for (const client of clientList) {
         if (client.url && client.url.startsWith(self.location.origin)) {
-          if ('navigate' in client) client.navigate(targetUrl)
+          if (client.navigate) await client.navigate(targetUrl).catch(() => {})
           return client.focus()
         }
       }
