@@ -1,5 +1,5 @@
 /* 上中黒板 Service Worker v4 - PWA */
-const CACHE_NAME = 'jochu-kokuban-v4';
+const CACHE_NAME = 'jochu-kokuban-v5';
 const STATIC_ASSETS = [
   '/',
   '/static/app.js',
