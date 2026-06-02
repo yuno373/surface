@@ -188,6 +188,39 @@ app.get('/api/disaster/current', async (c) => {
   return c.json({ title: parts.length > 0 ? parts.join(' | ') : null, level })
 })
 
+// 天気予報API（埼玉県南部）
+const WEATHER_CODES: Record<string, string> = {'100':'☀️','101':'☀️','110':'⛅','200':'☁️','201':'☁️','202':'☁️','210':'🌤','211':'🌤','212':'🌤','300':'🌧','301':'🌧','302':'🌧','303':'🌧','304':'🌧','306':'🌧','308':'🌧','311':'🌧','313':'🌧','314':'🌧','400':'❄️','401':'❄️','402':'❄️','403':'❄️'}
+app.get('/api/weather/forecast', async (c) => {
+  try {
+    const resp = await fetch('https://www.jma.go.jp/bosai/forecast/data/forecast/110000.json', { signal: AbortSignal.timeout(5000) })
+    if (!resp.ok) return c.json({ error: 'Failed' }, 500)
+    const data = await resp.json() as any[]
+    const result: any[] = []
+    for (const report of data || []) {
+      const ts1 = report?.timeSeries?.[0]
+      const ts2 = report?.timeSeries?.[1]
+      const ts3 = report?.timeSeries?.[2]
+      const areaSouth = ts1?.areas?.find((a: any) => a.area?.code === '110010')
+      const popSouth = ts2?.areas?.find((a: any) => a.area?.code === '110010')
+      const tempArea = ts3?.areas?.[0]
+      if (areaSouth && ts1?.timeDefines) {
+        result.push({
+          date: ts1.timeDefines[0],
+          weather: (WEATHER_CODES[areaSouth.weatherCodes?.[0]] || '') + (areaSouth.weathers?.[0] || ''),
+          weatherTomorrow: (WEATHER_CODES[areaSouth.weatherCodes?.[1]] || '') + (areaSouth.weathers?.[1] || ''),
+          wind: areaSouth.winds?.[0] || '',
+          windTomorrow: areaSouth.winds?.[1] || '',
+          pops: (popSouth?.pops || []).slice(0, 4),
+          temps: tempArea?.temps ? { today: tempArea.temps[0], tonight: tempArea.temps[1], tomorrow: tempArea.temps[2], tomorrowNight: tempArea.temps[3] } : null,
+          publishingOffice: report.publishingOffice,
+          reportDatetime: report.reportDatetime
+        })
+      }
+    }
+    return c.json({ forecasts: result })
+  } catch { return c.json({ error: 'Failed' }, 500) }
+})
+
 const distDir = process.cwd() + '/dist'
 app.use('/static/*', serveStatic({ root: distDir }))
 app.use('/icons/*', serveStatic({ root: distDir }))
