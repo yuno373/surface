@@ -114,6 +114,17 @@ app.get('/api/wbgt', async (c) => {
   return c.json({ wbgt: null, level: null, alert: null })
 })
 
+// 現在の防災情報を取得
+app.get('/api/disaster/current', async (c) => {
+  try {
+    const latest = await c.env.DB.prepare(
+      "SELECT title, body, created_at FROM notifications WHERE type LIKE '%disaster%' OR type LIKE '%災害%' ORDER BY created_at DESC LIMIT 1"
+    ).first<any>()
+    if (latest) return c.json({ title: latest.title, body: latest.body, time: latest.created_at })
+  } catch {}
+  return c.json({ title: null })
+})
+
 const distDir = process.cwd() + '/dist'
 app.use('/static/*', serveStatic({ root: distDir }))
 app.use('/icons/*', serveStatic({ root: distDir }))
