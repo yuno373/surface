@@ -504,20 +504,20 @@ admin.post('/notifications/broadcast', async (c) => {
       "SELECT user_id, push_subscription FROM notification_settings WHERE push_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
     ).all<any>()
 
-    let pushSent = 0
     const payload = JSON.stringify({ title, body, type: type || 'normal' })
-    for (const pu of pushUsers.results) {
-      await pushToSubs(pu, payload).catch(() => {})
-      pushSent++
-    }
 
-    for (const u of allUsers.results) {
-      await c.env.DB.prepare(
+    // DB通知の作成（全ユーザー分を一括で非同期実行）
+    await Promise.all(allUsers.results.map(u =>
+      c.env.DB.prepare(
         'INSERT INTO notifications (user_id, type, title, body, created_by) VALUES (?, ?, ?, ?, ?)'
       ).bind(u.id, type || 'normal', title, body, user.id).run()
-    }
+    ))
 
-    return c.json({ success: true, sent: allUsers.results.length, pushSent })
+    // プッシュ通知は非同期で送信（レスポンスを待たない）
+    const pushLen = pushUsers.results.length
+    Promise.allSettled(pushUsers.results.map(pu => pushToSubs(pu, payload))).catch(() => {})
+
+    return c.json({ success: true, sent: allUsers.results.length, pushSent: pushLen })
   } catch (e: any) {
     return c.json({ error: '配信失敗: ' + (e.message || e) }, 500)
   }
@@ -530,9 +530,9 @@ async function pushToSubs(subRow: any, payload: string) {
     if (Array.isArray(parsed)) subs.push(...parsed)
     else subs.push(parsed)
   } catch { return }
-  for (const sub of subs) {
-    try { await webpush.sendNotification(sub, payload).catch(() => {}) } catch {}
-  }
+  await Promise.allSettled(subs.map(sub =>
+    webpush.sendNotification(sub, payload).catch(() => {})
+  ))
 }
 
 // プッシュ通知テスト送信
