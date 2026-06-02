@@ -769,24 +769,26 @@ async function deleteSelfNotif(id){try{const r=await api('/api/notifications/'+i
 async function testPush(){try{const r=await api('/api/admin/notifications/test',{method:'POST'});if(r.error){toast(r.error+(r.endpoint?' ['+r.endpoint+']':''),'error');return;}toast(r.message+(r.devices?' ['+r.devices+']':''),'success');}catch(e){toast('失敗: '+(e.message||'エラー'),'error');}}
 
 let _lastNotifId = 0
+let _lastNotifInit = false
 async function pollNotifications() {
   try {
-    const r = await api('/api/auth/notifications/unread-count')
-    if (r.count > 0) {
-      const badge = document.getElementById('notif-badge')
-      if (badge) { badge.textContent = r.count > 99 ? '99+' : r.count; badge.classList.remove('hidden') }
+    const list = await api('/api/auth/notifications')
+    if (_lastNotifInit) {
       if (Notification.permission === 'granted') {
-        const list = await api('/api/auth/notifications')
         for (const n of list.notifications || []) {
           if (n.id > _lastNotifId && n.title) {
             try { new Notification('上中黒板', { body: n.title, icon: '/icons/icon-192.png' }) } catch {}
           }
         }
-        if (list.notifications?.length) _lastNotifId = list.notifications[0].id
       }
-    } else {
-      const badge = document.getElementById('notif-badge')
-      if (badge) badge.classList.add('hidden')
+    }
+    if (list.notifications?.length) _lastNotifId = list.notifications[0].id
+    _lastNotifInit = true
+    const badge = document.getElementById('notif-badge')
+    const r = await api('/api/auth/notifications/unread-count')
+    if (badge) {
+      if (r.count > 0) { badge.textContent = r.count > 99 ? '99+' : r.count; badge.classList.remove('hidden') }
+      else badge.classList.add('hidden')
     }
   } catch {}
   setTimeout(pollNotifications, 30000)
