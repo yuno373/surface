@@ -121,7 +121,7 @@ const JMA_WARNINGS: Record<string, string> = {'02':'暴風雪警報','03':'大�
 app.get('/api/disaster/current', async (c) => {
   let jma: { title: string; severity: string } | null = null
   try {
-    const resp = await fetch('https://www.jma.go.jp/bosai/warning/data/warning/130000.json', { signal: AbortSignal.timeout(5000) })
+    const resp = await fetch('https://www.jma.go.jp/bosai/warning/data/warning/110000.json', { signal: AbortSignal.timeout(5000) })
     if (resp.ok) {
       const data = await resp.json() as any
       const warnings: { label: string; code: string }[] = []
