@@ -186,6 +186,7 @@ function buildNav() {
     const btn=document.createElement('button'); btn.className='nav-btn'; btn.id='nav-'+tab.id;
     let html='<i class="fas '+tab.icon+'"></i><span>'+tab.label+'</span>';
     if(tab.id==='messages')html='<div class="relative inline-flex"><i class="fas '+tab.icon+'"></i><span id="msg-badge" class="absolute -top-2 -right-3 bg-red-500 text-white text-[10px] min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1 hidden"></span></div><span>'+tab.label+'</span>';
+    if(tab.id==='notifications')html='<div class="relative inline-flex"><i class="fas '+tab.icon+'"></i><span id="notif-badge" class="absolute -top-2 -right-3 bg-red-500 text-white text-[10px] min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1 hidden"></span></div><span>'+tab.label+'</span>';
     btn.innerHTML=html;
     btn.onclick=()=>navigateTo(tab.id); nav.appendChild(btn);
   });
@@ -784,19 +785,14 @@ async function pollNotifications() {
     }
     if (list.notifications?.length) _lastNotifId = list.notifications[0].id
     _lastNotifInit = true
-    const badge = document.getElementById('notif-badge')
-    const r = await api('/api/auth/notifications/unread-count')
-    if (badge) {
-      if (r.count > 0) { badge.textContent = r.count > 99 ? '99+' : r.count; badge.classList.remove('hidden') }
-      else badge.classList.add('hidden')
-    }
+    updateNotifBadge()
   } catch {}
   setTimeout(pollNotifications, 30000)
 }
 
-async function loadNotifications(){const c=document.getElementById('notif-list');if(!c)return;try{const r=await api('/api/auth/notifications');if(!r.notifications.length){c.innerHTML='<div class="empty-state"><i class="fas fa-bell-slash"></i><p>通知はありません</p></div>';return;}c.innerHTML=r.notifications.map(n=>'<div class="card p-4 mb-2 flex items-start gap-3'+(n.is_read?'':' cursor-pointer')+'"'+(n.is_read?'':' onclick="markNotifRead('+n.id+')"')+'><div class="w-8 h-8 rounded-full '+(n.is_read?'bg-gray-200':'bg-blue-100')+' flex items-center justify-center text-sm"><i class="fas '+(n.icon||'fa-bell')+' text-blue-600"></i></div><div class="flex-1"><p class="text-sm '+(n.is_read?'text-gray-500':'text-gray-800 font-semibold')+'">'+esc(n.title||n.message||n.body||'')+'</p><span class="text-xs text-gray-400">'+formatRelative(n.created_at)+'</span></div></div>').join('');}catch{}}
+async function loadNotifications(){const c=document.getElementById('notif-list');if(!c)return;try{const r=await api('/api/auth/notifications');if(!r.notifications.length){c.innerHTML='<div class="empty-state"><i class="fas fa-bell-slash"></i><p>通知はありません</p></div>';updateNotifBadge();return;}c.innerHTML=r.notifications.map(n=>'<div class="card p-4 mb-2 flex items-start gap-3'+(n.is_read?'':' cursor-pointer')+'"'+(n.is_read?'':' onclick="markNotifRead('+n.id+')"')+'><div class="w-8 h-8 rounded-full '+(n.is_read?'bg-gray-200':'bg-blue-100')+' flex items-center justify-center text-sm"><i class="fas '+(n.icon||'fa-bell')+' text-blue-600"></i></div><div class="flex-1"><p class="text-sm '+(n.is_read?'text-gray-500':'text-gray-800 font-semibold')+'">'+esc(n.title||n.message||n.body||'')+'</p><span class="text-xs text-gray-400">'+formatRelative(n.created_at)+'</span></div></div>').join('');updateNotifBadge();}catch{}}
 
-async function markNotifRead(id){try{await api('/api/auth/notifications/'+id+'/read',{method:'POST'});loadNotifications();}catch{}}
+async function markNotifRead(id){try{await api('/api/auth/notifications/'+id+'/read',{method:'POST'});loadNotifications();updateNotifBadge();}catch{}}
 
 function esc(str){if(!str)return '';return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}
 
@@ -820,4 +816,5 @@ function logout(){fetch('/api/auth/logout',{method:'POST',credentials:'include'}
 async function fetchWBGT(){try{const r=await api('/api/wbgt');const el=document.getElementById('wbgt-text');if(el){if(r.wbgt){const levelMap={'危険':'text-red-300','厳重警戒':'text-yellow-300','警戒':'text-yellow-200','注意':'text-green-200'};el.innerHTML='WBGT: <strong>'+r.wbgt+'°C</strong> <span class="'+(levelMap[r.level]||'')+'">('+r.level+')</span>'+(r.alert?' <span class="text-yellow-200">⚠'+r.alert+'</span>':'')+' | 気温'+r.temp+'°C 湿度'+r.humidity+'%';}else{el.textContent='気象情報取得中...';}}}catch{const el=document.getElementById('wbgt-text');if(el)el.textContent='気象情報取得失敗';}}
 
 async function fetchUnreadCount(){try{const r=await api('/api/messages/unread-count');const badge=document.getElementById('msg-badge');if(badge){badge.textContent=r.count>0?(r.count>99?'99+':r.count):'';badge.classList.toggle('hidden',r.count===0);}}catch{}}
+async function updateNotifBadge(){try{const r=await api('/api/auth/notifications/unread-count');const badge=document.getElementById('notif-badge');if(badge){if(r.count>0){badge.textContent=r.count>99?'99+':r.count;badge.classList.remove('hidden')}else badge.classList.add('hidden')}}catch{}}
 
