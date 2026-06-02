@@ -70,10 +70,23 @@ posts.get('/', async (c) => {
       reactionMap[r.post_id].push({ emoji: r.emoji, count: r.count })
     })
 
+    await c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS post_claims (post_id INTEGER, user_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (post_id, user_id))`).run()
+    const claimCounts = await c.env.DB.prepare(
+      `SELECT post_id, COUNT(*) as cnt FROM post_claims WHERE post_id IN (${placeholders}) GROUP BY post_id`
+    ).bind(...postIds).all<any>()
+    const myClaims = await c.env.DB.prepare(
+      `SELECT post_id FROM post_claims WHERE post_id IN (${placeholders}) AND user_id = ?`
+    ).bind(...postIds, user.id).all<any>()
+    const claimCountMap: Record<number, number> = {}
+    claimCounts.results.forEach((r: any) => { claimCountMap[r.post_id] = r.cnt })
+    const myClaimSet = new Set(myClaims.results.map((r: any) => r.post_id))
+
     enriched = postList.results.map((p: any) => ({
       ...p,
       reactions: reactionMap[p.id] || [],
-      is_read: readSet.has(p.id)
+      is_read: readSet.has(p.id),
+      claim_count: claimCountMap[p.id] || 0,
+      is_claimed: myClaimSet.has(p.id)
     }))
   }
 
@@ -183,6 +196,42 @@ posts.post('/', async (c) => {
   } catch {}
 
   return c.json({ success: true, id: newPost?.id })
+})
+
+// 忘れ物「私のです」申請
+posts.post('/:id/claim', async (c) => {
+  const user = await getUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const id = parseInt(c.req.param('id'))
+
+  const post = await c.env.DB.prepare('SELECT * FROM posts WHERE id = ? AND category = ?').bind(id, 'lost_item').first<any>()
+  if (!post) return c.json({ error: 'Not found' }, 404)
+
+  await c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS post_claims (post_id INTEGER, user_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (post_id, user_id))`).run()
+
+  const existing = await c.env.DB.prepare('SELECT * FROM post_claims WHERE post_id = ? AND user_id = ?').bind(id, user.id).first()
+  if (existing) {
+    await c.env.DB.prepare('DELETE FROM post_claims WHERE post_id = ? AND user_id = ?').bind(id, user.id).run()
+    return c.json({ action: 'unclaimed' })
+  }
+  await c.env.DB.prepare('INSERT INTO post_claims (post_id, user_id) VALUES (?, ?)').bind(id, user.id).run()
+  return c.json({ action: 'claimed' })
+})
+
+// 忘れ物 申請者一覧（投稿者のみ）
+posts.get('/:id/claims', async (c) => {
+  const user = await getUser(c)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const id = parseInt(c.req.param('id'))
+
+  const post = await c.env.DB.prepare('SELECT * FROM posts WHERE id = ?').bind(id).first<any>()
+  if (!post) return c.json({ error: 'Not found' }, 404)
+  if (post.author_id !== user.id) return c.json({ error: 'Forbidden' }, 403)
+
+  const claims = await c.env.DB.prepare(
+    'SELECT pc.user_id, u.name, u.grade, u.class_num, u.number, pc.created_at FROM post_claims pc JOIN users u ON pc.user_id = u.id WHERE pc.post_id = ? ORDER BY pc.created_at ASC'
+  ).bind(id).all<any>()
+  return c.json({ claims: claims.results })
 })
 
 posts.put('/:id', async (c) => {

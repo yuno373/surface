@@ -106,6 +106,9 @@ body { font-family: 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif; }
 }
 .reaction-btn:hover { background: #e8f5e9; border-color: #2d6a4f; }
 .reaction-btn.reacted { background: #e8f5e9; border-color: #2d6a4f; color: #2d6a4f; }
+.claim-btn { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #e74c3c; background: white; color: #e74c3c; border-radius: 999px; padding: 4px 14px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.claim-btn:hover { background: #fdf2f2; }
+.claim-btn.claimed { background: #f0fff4; border-color: #2ecc71; color: #27ae60; }
 
 /* アニメーション */
 @keyframes slideIn {
