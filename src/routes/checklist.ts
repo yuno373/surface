@@ -44,11 +44,12 @@ checklist.get('/items', async (c) => {
     const activeRentals = await c.env.DB.prepare(
       'SELECT COUNT(*) as cnt FROM pe_rentals WHERE item_id = ? AND returned_at IS NULL'
     ).bind(item.id).first<any>()
+    const st = item.checked === 1 ? 'ok' : item.checked === 2 ? 'ng' : null
     return {
       id: item.id,
       name: item.name,
       total_count: item.total_count,
-      status: item.checked ? 'ok' : 'ng',
+      status: st,
       can_check: canCheck,
       location: item.location || '',
       last_checker: item.last_checked_by_name || null,
@@ -113,7 +114,7 @@ checklist.post('/items/:id/check', async (c) => {
   }
   const id = parseInt(c.req.param('id'))
   const { status } = await c.req.json()
-  const newChecked = status === 'ok' ? 1 : 0
+  const newChecked = status === 'ok' ? 1 : status === 'ng' ? 2 : 0
   const item = await c.env.DB.prepare('SELECT * FROM pe_checklist_items WHERE id = ?').bind(id).first<any>()
   if (!item) return c.json({ error: 'Not found' }, 404)
   await c.env.DB.prepare(
