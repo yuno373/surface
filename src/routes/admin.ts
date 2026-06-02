@@ -525,7 +525,11 @@ admin.post('/notifications/test', async (c) => {
   } catch (e: any) {
     let detail = e.message || String(e)
     if (e.errors && Array.isArray(e.errors)) {
-      detail = e.errors.map((err: any) => err.message || err).join('; ')
+      detail = e.errors.map((err: any) => {
+        const statusCode = err.statusCode ? `[${err.statusCode}]` : ''
+        const msg = err.body || err.message || String(err)
+        return statusCode + msg
+      }).join(' | ')
     }
     return c.json({ error: 'プッシュ送信失敗: ' + detail })
   }
