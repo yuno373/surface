@@ -496,31 +496,34 @@ admin.post('/notifications/broadcast', async (c) => {
   const roles = await getUserRoles(c.env.DB, user.id)
   if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
 
-  const { title, body, type } = await c.req.json()
-  const allUsers = await c.env.DB.prepare('SELECT id FROM users').all<any>()
+  try {
+    const { title, body, type } = await c.req.json()
+    const allUsers = await c.env.DB.prepare('SELECT id FROM users').all<any>()
 
-  // Get all users with push subscriptions
-  const pushUsers = await c.env.DB.prepare(
-    "SELECT user_id, push_subscription FROM notification_settings WHERE push_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
-  ).all<any>()
+    const pushUsers = await c.env.DB.prepare(
+      "SELECT user_id, push_subscription FROM notification_settings WHERE push_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
+    ).all<any>()
 
-  let pushSent = 0
-  const payload = JSON.stringify({ title, body, type: type || 'normal' })
-  for (const pu of pushUsers.results) {
-    pushToSubs(pu, payload)
-    pushSent++
+    let pushSent = 0
+    const payload = JSON.stringify({ title, body, type: type || 'normal' })
+    for (const pu of pushUsers.results) {
+      await pushToSubs(pu, payload).catch(() => {})
+      pushSent++
+    }
+
+    for (const u of allUsers.results) {
+      await c.env.DB.prepare(
+        'INSERT INTO notifications (user_id, type, title, body, created_by) VALUES (?, ?, ?, ?, ?)'
+      ).bind(u.id, type || 'normal', title, body, user.id).run()
+    }
+
+    return c.json({ success: true, sent: allUsers.results.length, pushSent })
+  } catch (e: any) {
+    return c.json({ error: '配信失敗: ' + (e.message || e) }, 500)
   }
-
-  for (const u of allUsers.results) {
-    await c.env.DB.prepare(
-      'INSERT INTO notifications (user_id, type, title, body, created_by) VALUES (?, ?, ?, ?, ?)'
-    ).bind(u.id, type || 'normal', title, body, user.id).run()
-  }
-
-  return c.json({ success: true, sent: allUsers.results.length, pushSent })
 })
 
-function pushToSubs(subRow: any, payload: string) {
+async function pushToSubs(subRow: any, payload: string) {
   const subs: any[] = []
   try {
     const parsed = JSON.parse(subRow.push_subscription)
@@ -528,7 +531,7 @@ function pushToSubs(subRow: any, payload: string) {
     else subs.push(parsed)
   } catch { return }
   for (const sub of subs) {
-    try { webpush.sendNotification(sub, payload) } catch {}
+    try { await webpush.sendNotification(sub, payload).catch(() => {}) } catch {}
   }
 }
 
@@ -594,7 +597,7 @@ admin.post('/notifications/self', async (c) => {
     const subRow = await c.env.DB.prepare(
       "SELECT push_subscription FROM notification_settings WHERE user_id = ? AND push_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
     ).bind(user.id).first<any>()
-    if (subRow) pushToSubs(subRow, JSON.stringify({ title: message, body: '', type: 'self' }))
+    if (subRow) await pushToSubs(subRow, JSON.stringify({ title: message, body: '', type: 'self' })).catch(() => {})
   }
 
   return c.json({ success: true })

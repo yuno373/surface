@@ -170,7 +170,7 @@ posts.post('/', async (c) => {
           else subs.push(parsed)
         } catch { continue }
         for (const sub of subs) {
-          try { webpush.sendNotification(sub, pushPayload) } catch {}
+          try { await webpush.sendNotification(sub, pushPayload).catch(() => {}) } catch {}
         }
       }
     }
