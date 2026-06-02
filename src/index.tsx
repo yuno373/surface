@@ -19,18 +19,33 @@ const app = new Hono<{ Bindings: Env }>()
 let db: any, r2: any
 try { db = createD1Client(); r2 = createR2Client() } catch {}
 
-// マイグレーション（不足カラム追加）
+// マイグレーション（不足カラム追加）— 生のCloudflare API呼び出し
 let _migrated = false
 async function runMigrations() {
-  if (_migrated || !db) return
+  if (_migrated) return
   _migrated = true
+  const accountId = process.env.CF_ACCOUNT_ID
+  const dbId = process.env.CF_D1_DATABASE_ID
+  const apiToken = process.env.CF_API_TOKEN
+  if (!accountId || !dbId || !apiToken) return
   try {
-    const cols = await db.prepare("PRAGMA table_info('survey_answers')").all<any>()
-    if (!cols.results.some((r: any) => r.name === 'answer')) {
-      await db.prepare("ALTER TABLE survey_answers ADD COLUMN answer TEXT").run()
+    const chk = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${dbId}/query`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sql: "PRAGMA table_info(survey_answers)" })
+    })
+    const chkData = await chk.json() as any
+    const hasAnswer = chkData?.result?.[0]?.results?.some((r: any) => r.name === 'answer')
+    if (!hasAnswer) {
+      await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${dbId}/query`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql: "ALTER TABLE survey_answers ADD COLUMN answer TEXT DEFAULT ''" })
+      })
     }
   } catch {}
 }
+runMigrations()
 runMigrations()
 
 app.use('*', async (c, next) => {
