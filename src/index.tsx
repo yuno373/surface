@@ -141,8 +141,6 @@ app.get('/api/disaster/current', async (c) => {
       if (warnings.length > 0) {
         const hasAlert = warnings.some(w => ['02','03','04','05','06','07','08'].includes(w.code))
         jma = { title: '⚠ ' + warnings.map(w => w.label).join('、'), severity: hasAlert ? 'alert' : 'advisory' }
-      } else if (data?.headlineText) {
-        jma = { title: data.headlineText, severity: 'info' }
       }
     }
   } catch {}
