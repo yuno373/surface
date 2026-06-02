@@ -20,8 +20,10 @@ let db: any, r2: any
 try { db = createD1Client(); r2 = createR2Client() } catch {}
 
 // マイグレーション（不足カラム追加）
+let _migrated = false
 async function runMigrations() {
-  if (!db) return
+  if (_migrated || !db) return
+  _migrated = true
   const fixes = [
     "ALTER TABLE survey_answers ADD COLUMN answer TEXT",
   ]
@@ -32,7 +34,7 @@ async function runMigrations() {
 runMigrations()
 
 app.use('*', async (c, next) => {
-  if (!db) try { db = createD1Client() } catch {}
+  if (!db) try { db = createD1Client(); r2 = createR2Client(); runMigrations() } catch {}
   if (!r2) try { r2 = createR2Client() } catch {}
   c.env = { ...c.env, DB: db, R2: r2 }
   await next()
