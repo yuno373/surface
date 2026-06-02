@@ -336,6 +336,22 @@ messages.post('/threads/:threadId/messages', async (c) => {
     'INSERT INTO messages (thread_id, sender_id, content, file_url, file_type) VALUES (?, ?, ?, ?, ?)'
   ).bind(threadId, user.id, content || '', file_url || null, file_type || null).run()
 
+  // DB通知レコードを作成（非同期・fire-and-forget）
+  try {
+    const thread = await c.env.DB.prepare('SELECT * FROM message_threads WHERE id = ?').bind(threadId).first<any>()
+    const members = await c.env.DB.prepare(
+      'SELECT user_id FROM thread_members WHERE thread_id = ? AND user_id != ?'
+    ).bind(threadId, user.id).all<any>()
+    if (members.results.length > 0) {
+      const preview = (content || file_url || '').substring(0, 80)
+      const notifTitle = (thread?.name || 'メッセージ') + ': ' + user.name
+      Promise.all(members.results.map(m =>
+        c.env.DB.prepare('INSERT INTO notifications (user_id, type, title, body, created_by) VALUES (?, ?, ?, ?, ?)')
+          .bind(m.user_id, 'message:' + threadId, notifTitle, preview, user.id).run()
+      )).catch(() => {})
+    }
+  } catch {}
+
   return c.json({ success: true, message_id: result.meta.last_row_id })
 })
 
