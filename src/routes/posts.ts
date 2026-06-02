@@ -163,7 +163,15 @@ posts.post('/', async (c) => {
     if (pushUsers.length > 0 && vapidPublicKey) {
       const pushPayload = JSON.stringify({ title: '上中黒板', body: notifMessage, type: 'post' })
       for (const pu of pushUsers) {
-        try { await webpush.sendNotification(JSON.parse(pu.push_subscription), pushPayload) } catch {}
+        const subs: any[] = []
+        try {
+          const parsed = JSON.parse(pu.push_subscription)
+          if (Array.isArray(parsed)) subs.push(...parsed)
+          else subs.push(parsed)
+        } catch { continue }
+        for (const sub of subs) {
+          try { webpush.sendNotification(sub, pushPayload) } catch {}
+        }
       }
     }
   } catch {}

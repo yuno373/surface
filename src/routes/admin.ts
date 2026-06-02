@@ -453,6 +453,20 @@ admin.put('/notifications/settings', async (c) => {
   const body = await c.req.json()
   const { push_enabled, disaster_enabled, club_post_enabled, committee_post_enabled, school_notice_enabled, message_enabled, push_subscription } = body
 
+  // 複数購読を管理: push_subscriptions JSON配列に追加
+  let subs: any[] = []
+  if (push_subscription) {
+    const existing = await c.env.DB.prepare('SELECT push_subscription FROM notification_settings WHERE user_id = ?').bind(user.id).first<any>()
+    if (existing && existing.push_subscription) {
+      try { subs = JSON.parse(existing.push_subscription) } catch { subs = [] }
+      if (!Array.isArray(subs)) subs = [subs]
+    }
+    const newSub = typeof push_subscription === 'string' ? JSON.parse(push_subscription) : push_subscription
+    const idx = subs.findIndex((s: any) => s.endpoint === newSub.endpoint)
+    if (idx >= 0) subs[idx] = newSub
+    else subs.push(newSub)
+  }
+
   const existing = await c.env.DB.prepare('SELECT id FROM notification_settings WHERE user_id = ?').bind(user.id).first()
   if (existing) {
     await c.env.DB.prepare(`
@@ -463,14 +477,14 @@ admin.put('/notifications/settings', async (c) => {
       WHERE user_id = ?
     `).bind(push_enabled ? 1 : 0, disaster_enabled ? 1 : 0, club_post_enabled ? 1 : 0,
       committee_post_enabled ? 1 : 0, school_notice_enabled ? 1 : 0, message_enabled ? 1 : 0,
-      push_subscription || null, user.id).run()
+      subs.length > 0 ? JSON.stringify(subs) : (push_subscription || null), user.id).run()
   } else {
     await c.env.DB.prepare(`
       INSERT INTO notification_settings (user_id, push_enabled, disaster_enabled, club_post_enabled, committee_post_enabled, school_notice_enabled, message_enabled, push_subscription)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(user.id, push_enabled ? 1 : 0, disaster_enabled ? 1 : 0, club_post_enabled ? 1 : 0,
       committee_post_enabled ? 1 : 0, school_notice_enabled ? 1 : 0, message_enabled ? 1 : 0,
-      push_subscription || null).run()
+      subs.length > 0 ? JSON.stringify(subs) : (push_subscription || null)).run()
   }
 
   return c.json({ success: true })
@@ -491,12 +505,10 @@ admin.post('/notifications/broadcast', async (c) => {
   ).all<any>()
 
   let pushSent = 0
+  const payload = JSON.stringify({ title, body, type: type || 'normal' })
   for (const pu of pushUsers.results) {
-    try {
-      const sub = JSON.parse(pu.push_subscription)
-      await webpush.sendNotification(sub, JSON.stringify({ title, body, type: type || 'normal' }))
-      pushSent++
-    } catch { /* skip failed sends */ }
+    pushToSubs(pu, payload)
+    pushSent++
   }
 
   for (const u of allUsers.results) {
@@ -508,6 +520,18 @@ admin.post('/notifications/broadcast', async (c) => {
   return c.json({ success: true, sent: allUsers.results.length, pushSent })
 })
 
+function pushToSubs(subRow: any, payload: string) {
+  const subs: any[] = []
+  try {
+    const parsed = JSON.parse(subRow.push_subscription)
+    if (Array.isArray(parsed)) subs.push(...parsed)
+    else subs.push(parsed)
+  } catch { return }
+  for (const sub of subs) {
+    try { webpush.sendNotification(sub, payload) } catch {}
+  }
+}
+
 // プッシュ通知テスト送信
 admin.post('/notifications/test', async (c) => {
   const user = await getUser(c)
@@ -516,35 +540,30 @@ admin.post('/notifications/test', async (c) => {
   const subRow = await c.env.DB.prepare(
     "SELECT push_subscription FROM notification_settings WHERE user_id = ? AND push_subscription IS NOT NULL AND push_subscription != ''"
   ).bind(user.id).first<any>()
-  if (!subRow) return c.json({ error: '購読データがありません。通知をオンにしてください' })
+  if (!subRow || !subRow.push_subscription) return c.json({ error: '購読データがありません。通知をオンにしてください' })
 
+  const subs: any[] = []
   try {
-    const sub = JSON.parse(subRow.push_subscription)
-    const endpoint = sub.endpoint || 'なし'
-    await webpush.sendNotification(sub, JSON.stringify({ title: 'テスト通知', body: 'プッシュ通知は正常に動作しています', type: 'normal' }))
-    return c.json({ success: true, message: 'プッシュ通知を送信しました' })
-  } catch (e: any) {
-    let detail = ''
-    let sc = null
-    if (e.errors && Array.isArray(e.errors)) {
-      detail = e.errors.map((err: any) => {
-        sc = sc || err.statusCode
-        const s = err.statusCode ? `[${err.statusCode}]` : ''
-        const msg = err.body || err.message || String(err)
-        return s + msg
-      }).join(' | ')
-    } else if (e.statusCode) {
-      sc = e.statusCode
-      detail = `[${e.statusCode}] ` + (e.body || e.message || '')
-    } else {
-      detail = e.message || String(e)
+    const parsed = JSON.parse(subRow.push_subscription)
+    if (Array.isArray(parsed)) subs.push(...parsed)
+    else subs.push(parsed)
+  } catch { return c.json({ error: '購読データが破損しています。設定から通知をオンにし直してください' }) }
+
+  let sent = 0; let errors: string[] = []
+  for (const sub of subs) {
+    try {
+      await webpush.sendNotification(sub, JSON.stringify({ title: 'テスト通知', body: 'プッシュ通知は正常に動作しています', type: 'normal' }))
+      sent++
+    } catch (e: any) {
+      const sc = e.statusCode || (e.errors?.[0]?.statusCode) || null
+      const msg = e.message || String(e)
+      errors.push(sc ? `[${sc}] ${msg.substring(0,80)}` : msg.substring(0,80))
     }
-    if (sc === 401 || sc === 403 || sc === 410) {
-      await c.env.DB.prepare("UPDATE notification_settings SET push_subscription = NULL, push_enabled = 0 WHERE user_id = ?").bind(user.id).run()
-    }
-    const ep = (JSON.parse(subRow.push_subscription).endpoint || '').replace(/[?&].*$/,'').substring(0,120)
-    return c.json({ error: 'プッシュ送信失敗: ' + detail + (sc===401||sc===403||sc===410?' 購読期限切れのためリセットしました。設定から再度オンにしてください':''), endpoint: ep })
   }
+
+  if (sent > 0) return c.json({ success: true, message: `${sent}件のデバイスに送信しました${errors.length ? `（${errors.length}件失敗）` : ''}` })
+  const allErrors = errors.join(' | ')
+  return c.json({ error: 'プッシュ送信失敗: ' + allErrors, endpoint: subs[0]?.endpoint?.replace(/[?&].*$/,'').substring(0,120) || '' })
 })
 
 // 自分通知一覧
@@ -574,12 +593,7 @@ admin.post('/notifications/self', async (c) => {
     const subRow = await c.env.DB.prepare(
       "SELECT push_subscription FROM notification_settings WHERE user_id = ? AND push_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
     ).bind(user.id).first<any>()
-    if (subRow) {
-      try {
-        const sub = JSON.parse(subRow.push_subscription)
-        await webpush.sendNotification(sub, JSON.stringify({ title: message, body: '', type: 'self' }))
-      } catch {}
-    }
+    if (subRow) pushToSubs(subRow, JSON.stringify({ title: message, body: '', type: 'self' }))
   }
 
   return c.json({ success: true })
