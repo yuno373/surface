@@ -19,6 +19,18 @@ const app = new Hono<{ Bindings: Env }>()
 let db: any, r2: any
 try { db = createD1Client(); r2 = createR2Client() } catch {}
 
+// マイグレーション（不足カラム追加）
+async function runMigrations() {
+  if (!db) return
+  const fixes = [
+    "ALTER TABLE survey_answers ADD COLUMN answer TEXT",
+  ]
+  for (const sql of fixes) {
+    try { await db.exec(sql) } catch {}
+  }
+}
+runMigrations()
+
 app.use('*', async (c, next) => {
   if (!db) try { db = createD1Client() } catch {}
   if (!r2) try { r2 = createR2Client() } catch {}
