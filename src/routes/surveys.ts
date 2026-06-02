@@ -174,6 +174,15 @@ surveys.post('/:id/answers', async (c) => {
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
   const surveyId = parseInt(c.req.param('id'))
+
+  // Ensure answer column exists
+  try {
+    const cols = await c.env.DB.prepare("PRAGMA table_info('survey_answers')").all<any>()
+    if (!cols.results.some((r: any) => r.name === 'answer')) {
+      await c.env.DB.prepare("ALTER TABLE survey_answers ADD COLUMN answer TEXT").run()
+    }
+  } catch {}
+
   const { answers } = await c.req.json()
 
   const survey = await c.env.DB.prepare(
@@ -214,9 +223,13 @@ surveys.get('/:id/results', async (c) => {
   try {
     const id = parseInt(c.req.param('id'))
 
-    // Ensure answer column exists
+    // Ensure answer column exists in survey_answers
     try {
-      await c.env.DB.exec("ALTER TABLE survey_answers ADD COLUMN answer TEXT")
+      const cols = await c.env.DB.prepare("PRAGMA table_info('survey_answers')").all<any>()
+      const hasAnswer = cols.results.some((r: any) => r.name === 'answer')
+      if (!hasAnswer) {
+        await c.env.DB.prepare("ALTER TABLE survey_answers ADD COLUMN answer TEXT").run()
+      }
     } catch {}
 
     const survey = await c.env.DB.prepare('SELECT * FROM surveys WHERE id = ?').bind(id).first<any>()

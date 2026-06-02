@@ -24,12 +24,12 @@ let _migrated = false
 async function runMigrations() {
   if (_migrated || !db) return
   _migrated = true
-  const fixes = [
-    "ALTER TABLE survey_answers ADD COLUMN answer TEXT",
-  ]
-  for (const sql of fixes) {
-    try { await db.exec(sql) } catch {}
-  }
+  try {
+    const cols = await db.prepare("PRAGMA table_info('survey_answers')").all<any>()
+    if (!cols.results.some((r: any) => r.name === 'answer')) {
+      await db.prepare("ALTER TABLE survey_answers ADD COLUMN answer TEXT").run()
+    }
+  } catch {}
 }
 runMigrations()
 
