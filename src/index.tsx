@@ -83,13 +83,17 @@ if (vapidPublicKey && vapidPrivateKey) {
 app.get('/api/wbgt', async (c) => {
   try {
     const resp = await fetch(
-      'https://api.open-meteo.com/v1/forecast?latitude=35.6762&longitude=139.6503&current=temperature_2m,relative_humidity_2m',
+      'https://api.open-meteo.com/v1/forecast?latitude=35.6762&longitude=139.6503&current=temperature_2m,relative_humidity_2m,weather_code',
       { signal: AbortSignal.timeout(5000) }
     )
     if (resp.ok) {
       const data = await resp.json() as any
       const ta = data?.current?.temperature_2m
       const rh = data?.current?.relative_humidity_2m
+      const wc = data?.current?.weather_code
+      const weatherMap: Record<number, string> = {0:'☀️',1:'🌤',2:'⛅',3:'☁️',45:'🌫',48:'🌫',51:'🌦',53:'🌦',55:'🌦',56:'🌧',57:'🌧',61:'🌧',63:'🌧',65:'🌧',66:'🌧',67:'🌧',71:'❄️',73:'❄️',75:'❄️',77:'❄️',80:'🌦',81:'🌦',82:'🌦',85:'❄️',86:'❄️',95:'⛈',96:'⛈',99:'⛈'}
+      const weatherDesc: Record<number, string> = {0:'快晴',1:'晴れ',2:'薄曇り',3:'曇り',45:'霧',48:'霧',51:'小雨',53:'適度な雨',55:'強い雨',56:'氷雨（弱）',57:'氷雨（強）',61:'雨（弱）',63:'雨（中）',65:'雨（強）',66:'凍雨（弱）',67:'凍雨（強）',71:'雪（弱）',73:'雪（中）',75:'雪（強）',77:'霰',80:'にわか雨（弱）',81:'にわか雨（中）',82:'にわか雨（強）',85:'にわか雪（弱）',86:'にわか雪（強）',95:'雷雨',96:'雹を伴う雷雨',99:'強い雹を伴う雷雨'}
+      const weather = wc != null ? (weatherMap[wc] || '') + (weatherDesc[wc] || '') : ''
       if (ta != null && rh != null) {
         const tw = ta * Math.atan(0.151977 * Math.sqrt(rh + 8.313659))
           + Math.atan(ta + rh)
@@ -103,7 +107,7 @@ app.get('/api/wbgt', async (c) => {
         else if (wbgt >= 28) { level = '危険'; alert = '激しい運動は中止' }
         else if (wbgt >= 25) { level = '厳重警戒'; alert = '積極的に休息' }
         else if (wbgt >= 21) { level = '警戒'; alert = 'こまめに休息' }
-        return c.json({ wbgt: Math.round(wbgt * 10) / 10, level, alert, temp: ta, humidity: rh })
+        return c.json({ wbgt: Math.round(wbgt * 10) / 10, level, alert, temp: ta, humidity: rh, weather })
       }
     }
   } catch {}
