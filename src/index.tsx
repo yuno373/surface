@@ -19,16 +19,15 @@ const app = new Hono<{ Bindings: Env }>()
 let db: any, r2: any
 try { db = createD1Client(); r2 = createR2Client() } catch {}
 
-// マイグレーション（不足カラム追加）— 生のCloudflare API呼び出し
+// マイグレーション（不足カラム追加）
 let _migrated = false
-let _migrateResult = 'pending'
 async function runMigrations() {
   if (_migrated) return
   _migrated = true
   const accountId = process.env.CF_ACCOUNT_ID
   const dbId = process.env.CF_D1_DATABASE_ID
   const apiToken = process.env.CF_API_TOKEN
-  if (!accountId || !dbId || !apiToken) { _migrateResult = 'no-env'; return }
+  if (!accountId || !dbId || !apiToken) return
   try {
     const chk = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${dbId}/query`, {
       method: 'POST',
@@ -37,19 +36,16 @@ async function runMigrations() {
     })
     const chkData = await chk.json() as any
     const hasAnswer = chkData?.result?.[0]?.results?.some((r: any) => r.name === 'answer')
-    if (hasAnswer) { _migrateResult = 'ok-exists'; return }
-    const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${dbId}/query`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sql: "ALTER TABLE survey_answers ADD COLUMN answer TEXT DEFAULT ''", params: [] })
-    })
-    const rData = await r.json() as any
-    _migrateResult = rData?.success ? 'ok-added' : ('fail: ' + JSON.stringify(rData?.errors))
-  } catch (e: any) { _migrateResult = 'error: ' + (e.message || e) }
+    if (!hasAnswer) {
+      await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${dbId}/query`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql: "ALTER TABLE survey_answers ADD COLUMN answer TEXT DEFAULT ''", params: [] })
+      })
+    }
+  } catch {}
 }
 runMigrations()
-
-app.get('/debug/migrate', (c) => c.json({ migrateResult: _migrateResult }))
 runMigrations()
 
 app.use('*', async (c, next) => {

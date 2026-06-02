@@ -229,7 +229,7 @@ surveys.get('/:id/results', async (c) => {
         results.push({ question: q, answers: answers.results, total: answers.results.length })
       } else {
         const answers = await c.env.DB.prepare(
-          'SELECT sa.answer, COUNT(*) as cnt FROM survey_answers WHERE question_id = ? GROUP BY sa.answer ORDER BY cnt DESC'
+          'SELECT sa.answer, COUNT(*) as cnt FROM survey_answers sa WHERE question_id = ? GROUP BY sa.answer ORDER BY cnt DESC'
         ).bind(q.id).all<any>()
         const voters = await c.env.DB.prepare(
           'SELECT sa.answer, u.name as user_name, u.id as user_id FROM survey_answers sa JOIN users u ON sa.user_id = u.id WHERE sa.question_id = ? ORDER BY sa.answer, u.name'
