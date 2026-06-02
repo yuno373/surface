@@ -46,20 +46,31 @@ self.addEventListener('fetch', (event) => {
   
   // 静的アセットはキャッシュ優先
   event.respondWith(
-    caches.match(event.request).then((cached) => {
+    (async () => {
+      const url = new URL(event.request.url);
+      // HTML is always network-first, fallback to cache
+      if (event.request.mode === 'navigate' || url.pathname === '/') {
+        try {
+          const res = await fetch(event.request);
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+            return res;
+          }
+        } catch {}
+        const cached = await caches.match('/');
+        if (cached) return cached;
+        return new Response('', { status: 503 });
+      }
+      const cached = await caches.match(event.request);
       if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        if (response.ok && event.request.method === 'GET') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      }).catch(() => {
-        if (event.request.headers.get('accept')?.includes('text/html')) {
-          return caches.match('/');
-        }
-      });
-    })
+      const res = await fetch(event.request);
+      if (res.ok && event.request.method === 'GET') {
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+      }
+      return res;
+    })()
   );
 });
 
