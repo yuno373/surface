@@ -84,7 +84,7 @@ app.get('/api/wbgt', async (c) => {
   try {
     const resp = await fetch(
       'https://api.open-meteo.com/v1/forecast?latitude=35.8397&longitude=139.3912&current=temperature_2m,relative_humidity_2m,weather_code',
-      { signal: AbortSignal.timeout(5000) }
+      { signal: AbortSignal.timeout(15000) }
     )
     if (resp.ok) {
       const data = await resp.json() as any
