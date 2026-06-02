@@ -213,6 +213,12 @@ surveys.get('/:id/results', async (c) => {
 
   try {
     const id = parseInt(c.req.param('id'))
+
+    // Ensure answer column exists
+    try {
+      await c.env.DB.exec("ALTER TABLE survey_answers ADD COLUMN answer TEXT")
+    } catch {}
+
     const survey = await c.env.DB.prepare('SELECT * FROM surveys WHERE id = ?').bind(id).first<any>()
     if (!survey) return c.json({ error: 'Not found' }, 404)
 
