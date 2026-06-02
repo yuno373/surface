@@ -549,6 +549,7 @@ admin.post('/notifications/test', async (c) => {
     else subs.push(parsed)
   } catch { return c.json({ error: '購読データが破損しています。設定から通知をオンにし直してください' }) }
 
+  const epSummary = subs.map((s:any,i:number)=>`${i+1}:${(s.endpoint||'').replace(/https:\/\//,'').split('/')[0]}`).join(', ')
   let sent = 0; let errors: string[] = []
   for (const sub of subs) {
     try {
@@ -561,7 +562,7 @@ admin.post('/notifications/test', async (c) => {
     }
   }
 
-  if (sent > 0) return c.json({ success: true, message: `${sent}件のデバイスに送信しました${errors.length ? `（${errors.length}件失敗）` : ''}` })
+  if (sent > 0) return c.json({ success: true, message: `${sent}件/${subs.length}のデバイスに送信しました${errors.length ? `（${errors.length}件失敗）` : ''}`, devices: epSummary })
   const allErrors = errors.join(' | ')
   return c.json({ error: 'プッシュ送信失敗: ' + allErrors, endpoint: subs[0]?.endpoint?.replace(/[?&].*$/,'').substring(0,120) || '' })
 })
