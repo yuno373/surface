@@ -40,10 +40,7 @@ img { display: block; max-width: 100%; }
 /* カード */
 .card {
   background: white; border-radius: 14px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-  transition: box-shadow 0.2s;
 }
-.card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.10); }
 
 /* 投稿カード */
 .post-card {
@@ -98,8 +95,9 @@ img { display: block; max-width: 100%; }
 .sub-nav-btn {
   white-space: nowrap; padding: 6px 14px; border-radius: 20px;
   font-size: 12px; font-weight: 600; cursor: pointer;
-  transition: all 0.15s; border: none; background: #f0f4f8; color: #546e7a;
+  transition: all 0.15s; border: none; background: transparent; color: #546e7a;
 }
+.sub-nav-btn:hover { background: #e8f5e9; }
 .sub-nav-btn.active { background: #2d6a4f; color: white; }
 
 /* リアクション */
@@ -251,10 +249,11 @@ img { display: block; max-width: 100%; }
 .h-scroll-tabs::-webkit-scrollbar { display: none; }
 .h-scroll-tab {
   white-space: nowrap; padding: 6px 16px; border-radius: 20px;
-  background: #f0f4f8; color: #546e7a; font-size: 13px;
+  background: transparent; color: #546e7a; font-size: 13px;
   font-weight: 600; cursor: pointer; flex-shrink: 0;
   border: 2px solid transparent; transition: all 0.15s;
 }
+.h-scroll-tab:hover { background: #e8f5e9; }
 .h-scroll-tab.active { background: #2d6a4f; color: white; }
 
 /* 統計グラフ */
