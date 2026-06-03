@@ -72,25 +72,31 @@ function renderSetupStep() {
   const c=document.getElementById('setup-form-container');
   const role=currentUser.role;
   let h='<div class="mb-4 flex items-center gap-2 text-xs text-gray-400">';
-  const totalSteps=role==='admin'?4:role==='teacher'?5:2;
+  const totalSteps=role==='admin'?4:role==='teacher'?6:2;
   for(let i=0;i<totalSteps;i++) h+='<div class="w-3 h-3 rounded-full '+(i<=setupStep?'bg-blue-600':'bg-gray-200')+'"></div>';
   h+='</div>';
   if(role==='teacher') {
     if(setupStep===0) {
       h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問1: お名前は？</p><input id="setup-name" type="text" class="form-input text-center text-lg" placeholder="例: 山田 太郎"><div class="mt-6"><button onclick="setupNextName()" class="bg-blue-600 text-white px-10 py-3 rounded-xl text-lg font-semibold hover:bg-blue-700 transition"><i class="fas fa-arrow-right mr-2"></i>次へ</button></div></div>';
     } else if(setupStep===1) {
-      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問2: 担任を持っていますか？</p><div class="flex gap-4 justify-center"><button onclick="setupHomeroom(true)" class="bg-blue-600 text-white px-8 py-3 rounded-xl text-lg font-semibold hover:bg-blue-700 transition">はい</button><button onclick="setupHomeroom(false)" class="bg-gray-200 text-gray-700 px-8 py-3 rounded-xl text-lg font-semibold hover:bg-gray-300 transition">いいえ</button></div></div>';
+      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問2: あなたの役職は？</p><div class="flex gap-3 justify-center flex-wrap">';
+      h+='<button onclick="setupPosition(\'一般教員\')" class="bg-green-600 text-white px-6 py-3 rounded-xl text-lg font-semibold hover:bg-green-700 transition">一般教員</button>';
+      h+='<button onclick="setupPosition(\'校長\')" class="bg-purple-600 text-white px-6 py-3 rounded-xl text-lg font-bold hover:bg-purple-700 transition"><i class="fas fa-crown mr-1"></i>校長</button>';
+      h+='<button onclick="setupPosition(\'教頭\')" class="bg-indigo-600 text-white px-6 py-3 rounded-xl text-lg font-bold hover:bg-indigo-700 transition"><i class="fas fa-user-tie mr-1"></i>教頭</button>';
+      h+='</div></div>';
     } else if(setupStep===2) {
-      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問3: 担任は何組ですか？</p><div class="flex gap-2 justify-center flex-wrap">';
+      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問3: 担任を持っていますか？</p><div class="flex gap-4 justify-center"><button onclick="setupHomeroom(true)" class="bg-blue-600 text-white px-8 py-3 rounded-xl text-lg font-semibold hover:bg-blue-700 transition">はい</button><button onclick="setupHomeroom(false)" class="bg-gray-200 text-gray-700 px-8 py-3 rounded-xl text-lg font-semibold hover:bg-gray-300 transition">いいえ</button></div></div>';
+    } else if(setupStep===3) {
+      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問4: 担任は何組ですか？</p><div class="flex gap-2 justify-center flex-wrap">';
       for(let i=1;i<=9;i++) h+='<button onclick="setupHomeroomClass('+i+')" class="bg-blue-600 text-white w-14 h-14 rounded-xl text-lg font-bold hover:bg-blue-700 transition">'+i+'</button>';
       h+='</div></div>';
-    } else if(setupStep===3) {
-      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問4: 担当教科は？</p><div class="flex gap-2 justify-center flex-wrap">';
+    } else if(setupStep===4) {
+      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問5: 担当教科は？</p><div class="flex gap-2 justify-center flex-wrap">';
       const subs=['国語','数学','社会','理科','英語','音楽','美術','体育','技術','家庭科','保健'];
       subs.forEach(s=>h+='<button onclick="setupSubject(\''+s+'\')" class="bg-green-600 text-white px-6 py-3 rounded-xl text-lg font-semibold hover:bg-green-700 transition">'+s+'</button>');
       h+='<button onclick="setupSubjectOther()" class="bg-gray-200 text-gray-700 px-6 py-3 rounded-xl text-lg font-semibold hover:bg-gray-300 transition">その他</button>';
       h+='</div></div>';
-    } else if(setupStep===4) {
+    } else if(setupStep===5) {
       h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問5: パスワードを変更しますか？</p><div class="space-y-3"><input id="setup-password" type="password" class="form-input text-center text-lg" placeholder="空欄のまま→変更しない"></div><p class="text-sm text-gray-400 mt-2">空欄のままだと現在のパスワードのままです</p></div><div class="mt-6 flex justify-center"><button onclick="submitSetup()" class="bg-blue-600 text-white px-10 py-3 rounded-xl text-lg font-semibold hover:bg-blue-700 transition"><i class="fas fa-check mr-2"></i>設定を完了する</button></div>';
     }
   } else if(role==='admin') {
@@ -118,8 +124,9 @@ function renderSetupStep() {
   c.innerHTML=h;
 }
 
-function setupHomeroom(v){setupData.is_homeroom=v;if(v){setupStep=2;renderSetupStep();}else{setupData.homeroom_class=null;setupStep=3;renderSetupStep();}}
-function setupHomeroomClass(v){setupData.is_homeroom=true;setupData.homeroom_class=v;setupStep=3;renderSetupStep();}
+function setupPosition(v){setupData.position=v;if(v==='校長'||v==='教頭'){setupData.subject=v;setupData.is_homeroom=false;setupData.homeroom_class=null;setupStep=5;renderSetupStep();}else{setupStep=2;renderSetupStep();}}
+function setupHomeroom(v){setupData.is_homeroom=v;if(v){setupStep=3;renderSetupStep();}else{setupData.homeroom_class=null;setupStep=4;renderSetupStep();}}
+function setupHomeroomClass(v){setupData.is_homeroom=true;setupData.homeroom_class=v;setupStep=4;renderSetupStep();}
 function setupSubject(v){setupData.subject=v;setupStep++;renderSetupStep();}
 function setupSubjectOther(){var v=prompt('教科名を入力してください');if(v&&v.trim()){setupData.subject=v.trim();setupStep++;renderSetupStep();}}
 function setupNextName(){var v=document.getElementById('setup-name')?.value.trim();if(!v){toast('名前を入力してください','error');return;}setupData.name=v;setupStep++;renderSetupStep();}
