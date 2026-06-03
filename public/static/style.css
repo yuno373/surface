@@ -180,6 +180,10 @@ img { display: block; max-width: 100%; }
   50% { opacity: 0.85; }
 }
 
+/* TV表示 */
+@keyframes pulse-tv { 0%,100% { opacity: 1; } 50% { opacity: 0.8; } }
+@keyframes blink-tv { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
 /* WBGT */
 .wbgt-ok { background: #27ae60 !important; }
 .wbgt-caution { background: #f39c12 !important; }
