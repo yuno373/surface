@@ -50,6 +50,7 @@ async function ensureTable(db: any) {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )`).run()
+  await db.prepare("ALTER TABLE users ADD COLUMN homeroom_year INTEGER DEFAULT NULL").run().catch(() => {})
 }
 
 auth.post('/login', async (c) => {
@@ -94,7 +95,7 @@ auth.get('/profile', async (c) => {
   ).bind(sessionId).first<any>()
   if (!session) return c.json({ error: 'Session expired' }, 401)
   const user = await c.env.DB.prepare(
-    'SELECT id, username, login_id, role, name, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, avatar_url, bio, first_login FROM users WHERE id = ?'
+    'SELECT id, username, login_id, role, name, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, homeroom_year, avatar_url, bio, first_login FROM users WHERE id = ?'
   ).bind(session.user_id).first<any>()
   if (!user) return c.json({ error: 'User not found' }, 404)
   const enriched = await enrichUser(c.env.DB, user)
@@ -227,7 +228,7 @@ auth.get('/me', async (c) => {
   if (!session) return c.json({ error: 'Session expired' }, 401)
 
   const user = await c.env.DB.prepare(
-    'SELECT id, username, login_id, role, name, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, avatar_url, bio, first_login, roles_text FROM users WHERE id = ?'
+    'SELECT id, username, login_id, role, name, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, homeroom_year, avatar_url, bio, first_login, roles_text FROM users WHERE id = ?'
   ).bind(session.user_id).first<any>()
 
   if (!user) return c.json({ error: 'User not found' }, 404)
@@ -246,7 +247,7 @@ auth.post('/setup', async (c) => {
   if (!session) return c.json({ error: 'Session expired' }, 401)
 
   const body = await c.req.json()
-  const { name, grade, class_num, number, password, subject, is_homeroom, homeroom_class } = body
+  const { name, grade, class_num, number, password, subject, is_homeroom, homeroom_class, homeroom_year } = body
 
   const user = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?')
     .bind(session.user_id).first<any>()
@@ -261,6 +262,7 @@ auth.post('/setup', async (c) => {
   if (subject !== undefined) { updateFields.push('subject = ?'); params.push(subject) }
   if (is_homeroom !== undefined) { updateFields.push('is_homeroom = ?'); params.push(is_homeroom ? 1 : 0) }
   if (homeroom_class !== undefined) { updateFields.push('homeroom_class = ?'); params.push(homeroom_class) }
+  if (homeroom_year !== undefined) { updateFields.push('homeroom_year = ?'); params.push(homeroom_year) }
 
   if (password) {
     const hash = await hashPassword(password)
@@ -282,7 +284,7 @@ auth.post('/setup', async (c) => {
   }
 
   const updatedUser = await c.env.DB.prepare(
-    'SELECT id, username, login_id, role, name, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, avatar_url, bio, first_login FROM users WHERE id = ?'
+    'SELECT id, username, login_id, role, name, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, homeroom_year, avatar_url, bio, first_login FROM users WHERE id = ?'
   ).bind(session.user_id).first<any>()
 
   const enriched = await enrichUser(c.env.DB, updatedUser)

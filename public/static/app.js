@@ -87,9 +87,9 @@ function renderSetupStep() {
     } else if(setupStep===2) {
       h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問3: 担任を持っていますか？</p><div class="flex gap-4 justify-center"><button onclick="setupHomeroom(true)" class="bg-blue-600 text-white px-8 py-3 rounded-xl text-lg font-semibold hover:bg-blue-700 transition">はい</button><button onclick="setupHomeroom(false)" class="bg-gray-200 text-gray-700 px-8 py-3 rounded-xl text-lg font-semibold hover:bg-gray-300 transition">いいえ</button></div></div>';
     } else if(setupStep===3) {
-      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問4: 担任は何組ですか？</p><div class="flex gap-2 justify-center flex-wrap">';
-      for(let i=1;i<=9;i++) h+='<button onclick="setupHomeroomClass('+i+')" class="bg-blue-600 text-white w-14 h-14 rounded-xl text-lg font-bold hover:bg-blue-700 transition">'+i+'</button>';
-      h+='</div></div>';
+      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問4: 何年何組の担任ですか？</p><div class="flex gap-3 justify-center items-center"><select id="setup-hr-year" class="form-input text-lg w-24 text-center"><option value="1">1年</option><option value="2">2年</option><option value="3">3年</option></select><span class="text-lg font-bold">年</span><select id="setup-hr-class" class="form-input text-lg w-24 text-center">';
+      for(let i=1;i<=9;i++) h+='<option value="'+i+'">'+i+'</option>';
+      h+='</select><span class="text-lg font-bold">組</span></div><div class="mt-6"><button onclick="setupHomeroomClass()" class="bg-blue-600 text-white px-10 py-3 rounded-xl text-lg font-semibold hover:bg-blue-700 transition"><i class="fas fa-check mr-2"></i>決定</button></div></div>';
     } else if(setupStep===4) {
       h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問5: 担当教科は？</p><div class="flex gap-2 justify-center flex-wrap">';
       const subs=['国語','数学','社会','理科','英語','音楽','美術','体育','技術','家庭科','保健'];
@@ -126,7 +126,7 @@ function renderSetupStep() {
 
 function setupPosition(v){setupData.position=v;if(v==='校長'||v==='教頭'){setupData.subject=v;setupData.is_homeroom=false;setupData.homeroom_class=null;setupStep=5;renderSetupStep();}else{setupStep=2;renderSetupStep();}}
 function setupHomeroom(v){setupData.is_homeroom=v;if(v){setupStep=3;renderSetupStep();}else{setupData.homeroom_class=null;setupStep=4;renderSetupStep();}}
-function setupHomeroomClass(v){setupData.is_homeroom=true;setupData.homeroom_class=v;setupStep=4;renderSetupStep();}
+function setupHomeroomClass(){var y=parseInt(document.getElementById('setup-hr-year')?.value);var c=parseInt(document.getElementById('setup-hr-class')?.value);if(!y||!c)return;setupData.homeroom_year=y;setupData.homeroom_class=c;setupStep=4;renderSetupStep();}
 function setupSubject(v){setupData.subject=v;setupStep++;renderSetupStep();}
 function setupSubjectOther(){var v=prompt('教科名を入力してください');if(v&&v.trim()){setupData.subject=v.trim();setupStep++;renderSetupStep();}}
 function setupNextName(){var v=document.getElementById('setup-name')?.value.trim();if(!v){toast('名前を入力してください','error');return;}setupData.name=v;setupStep++;renderSetupStep();}
@@ -139,6 +139,7 @@ async function submitSetup() {
   const role=currentUser.role;
   if(role==='teacher') {
     if(setupData.is_homeroom!==undefined)body.is_homeroom=setupData.is_homeroom;
+    if(setupData.homeroom_year!==undefined)body.homeroom_year=setupData.homeroom_year;
     if(setupData.homeroom_class!==undefined)body.homeroom_class=setupData.homeroom_class;
     if(setupData.subject)body.subject=setupData.subject;
   } else if(role==='admin') {

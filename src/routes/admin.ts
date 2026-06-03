@@ -43,7 +43,7 @@ admin.get('/users', async (c) => {
 
   const users = await c.env.DB.prepare(
     `SELECT u.id, u.username, u.login_id, u.role, u.name, u.grade, u.class_num, u.number, u.club, u.committee, u.subject, 
-     u.is_homeroom, u.homeroom_class, u.avatar_url, u.first_login, u.created_at,
+      u.is_homeroom, u.homeroom_class, u.homeroom_year, u.avatar_url, u.first_login, u.created_at,
      (SELECT GROUP_CONCAT(role) FROM user_roles WHERE user_id = u.id) as all_roles
      FROM users u ORDER BY u.role, u.grade, u.class_num, u.number`
   ).all<any>()
@@ -68,7 +68,7 @@ admin.put('/users/:id', async (c) => {
   }
 
   const body = await c.req.json()
-  const { name, role, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, password, login_id, roles: newRoles } = body
+  const { name, role, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, homeroom_year, password, login_id, roles: newRoles } = body
 
   let fields: string[] = ['updated_at = datetime("now")']
   let params: any[] = []
@@ -82,6 +82,7 @@ admin.put('/users/:id', async (c) => {
   if (subject !== undefined) { fields.push('subject = ?'); params.push(subject) }
   if (is_homeroom !== undefined) { fields.push('is_homeroom = ?'); params.push(is_homeroom ? 1 : 0) }
   if (homeroom_class !== undefined) { fields.push('homeroom_class = ?'); params.push(homeroom_class) }
+  if (homeroom_year !== undefined) { fields.push('homeroom_year = ?'); params.push(homeroom_year) }
   if (login_id !== undefined) { fields.push('login_id = ?'); params.push(login_id) }
   if (role !== undefined && !isAdmin(myRoles) && role === 'admin') {
     return c.json({ error: '管理者権限は付与できません' }, 403)
@@ -747,7 +748,7 @@ admin.put('/profile', async (c) => {
   await c.env.DB.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).bind(...params).run()
 
   const updated = await c.env.DB.prepare(
-    'SELECT id, username, login_id, role, name, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, avatar_url, bio FROM users WHERE id = ?'
+    'SELECT id, username, login_id, role, name, grade, class_num, number, club, committee, subject, is_homeroom, homeroom_class, homeroom_year, avatar_url, bio FROM users WHERE id = ?'
   ).bind(user.id).first()
 
   return c.json({ success: true, user: updated })
@@ -759,7 +760,7 @@ admin.get('/teachers', async (c) => {
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
   const teachers = await c.env.DB.prepare(
-    "SELECT id, name, subject, is_homeroom, homeroom_class FROM users WHERE id IN (SELECT user_id FROM user_roles WHERE role IN ('teacher', 'admin')) ORDER BY name"
+    "SELECT id, name, subject, is_homeroom, homeroom_class, homeroom_year FROM users WHERE id IN (SELECT user_id FROM user_roles WHERE role IN ('teacher', 'admin')) ORDER BY name"
   ).all<any>()
 
   return c.json({ teachers: teachers.results })
