@@ -192,9 +192,7 @@ surveys.post('/:id/answers', async (c) => {
   ).bind(surveyId, user.id).first()
 
   if (existing) {
-    // 再回答：既存削除→再登録
-    await c.env.DB.prepare('DELETE FROM survey_answers WHERE survey_id = ? AND user_id = ?')
-      .bind(surveyId, user.id).run()
+    return c.json({ error: '既に回答済みです。再回答はできません。' }, 400)
   }
 
   for (const a of answers) {
