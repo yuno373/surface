@@ -378,19 +378,85 @@ admin.get('/diagnostics', async (c) => {
   if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
 
   const checks: any[] = []
+
+  // DB基本
   try {
     await c.env.DB.prepare('SELECT 1').first()
-    checks.push({ name: 'データベース', status: 'ok', message: '正常' })
-  } catch { checks.push({ name: 'データベース', status: 'error', message: 'DB接続エラー' }) }
+    checks.push({ name: 'データベース接続', status: 'ok', message: '正常' })
+  } catch { checks.push({ name: 'データベース接続', status: 'error', message: '接続エラー' }) }
 
   // 全テーブルチェック
   const tables = ['users', 'posts', 'messages', 'message_threads', 'thread_members', 'notifications', 'surveys', 'survey_answers', 'questions', 'pe_checklist_items', 'pe_checklist_logs', 'pe_rentals', 'user_roles', 'admin_settings', 'files', 'sessions', 'notification_settings', 'profile_change_requests']
+  let tableOk = 0, tableNg = 0
   for (const t of tables) {
     try {
       const r = await c.env.DB.prepare(`SELECT COUNT(*) as cnt FROM ${t}`).first<any>()
       checks.push({ name: `テーブル: ${t}`, status: 'ok', message: `${r?.cnt || 0}件` })
-    } catch { checks.push({ name: `テーブル: ${t}`, status: 'error', message: '存在しないかエラー' }) }
+      tableOk++
+    } catch { checks.push({ name: `テーブル: ${t}`, status: 'error', message: '存在しません' }); tableNg++ }
   }
+  checks.push({ name: 'テーブル整合性', status: tableNg === 0 ? 'ok' : 'error', message: `${tableOk}/${tables.length} OK, ${tableNg} NG` })
+
+  // クリーンアップ統計
+  const expiredSessions = await c.env.DB.prepare('SELECT COUNT(*) as cnt FROM sessions WHERE expires_at < datetime("now")').first<any>()
+  checks.push({ name: '期限切れセッション', status: 'info', message: `${expiredSessions?.cnt || 0}件` })
+  const expiredPosts = await c.env.DB.prepare('SELECT COUNT(*) as cnt FROM posts WHERE expires_at < datetime("now")').first<any>()
+  checks.push({ name: '期限切れ投稿', status: 'info', message: `${expiredPosts?.cnt || 0}件` })
+  const expiredQuestions = await c.env.DB.prepare('SELECT COUNT(*) as cnt FROM questions WHERE expires_at < datetime("now")').first<any>()
+  checks.push({ name: '期限切れ質問', status: 'info', message: `${expiredQuestions?.cnt || 0}件` })
+
+  // ユーザー統計
+  const userStats = await c.env.DB.prepare(
+    'SELECT role, COUNT(*) as cnt FROM users GROUP BY role'
+  ).all<any>()
+  const roleSummary = userStats.results.map(r => `${r.role}:${r.cnt}`).join(', ')
+  checks.push({ name: 'ユーザー数', status: 'info', message: roleSummary || 'データなし' })
+
+  // JMA天気API
+  try {
+    const jmaRes = await fetch('https://www.jma.go.jp/bosai/forecast/data/forecast/110000.json', { signal: AbortSignal.timeout(5000) })
+    if (jmaRes.ok) {
+      const jmaData = await jmaRes.json()
+      const ok = Array.isArray(jmaData) && jmaData.length > 0 && jmaData[0]?.publishingOffice
+      checks.push({ name: 'JMA天気API', status: ok ? 'ok' : 'error', message: ok ? `${jmaData[0].publishingOffice} 取得OK` : '応答が不正' })
+    } else {
+      checks.push({ name: 'JMA天気API', status: 'error', message: `HTTP ${jmaRes.status}` })
+    }
+  } catch { checks.push({ name: 'JMA天気API', status: 'error', message: 'タイムアウト/接続失敗' }) }
+
+  // JMA警報API
+  try {
+    const warnRes = await fetch('https://www.jma.go.jp/bosai/warning/data/warning/110000.json', { signal: AbortSignal.timeout(5000) })
+    checks.push({ name: 'JMA警報API', status: warnRes.ok ? 'ok' : 'error', message: warnRes.ok ? '取得OK' : `HTTP ${warnRes.status}` })
+  } catch { checks.push({ name: 'JMA警報API', status: 'error', message: 'タイムアウト/接続失敗' }) }
+
+  // Open-Meteo API
+  try {
+    const omRes = await fetch('https://api.open-meteo.com/v1/forecast?latitude=35.8397&longitude=139.3912&current=temperature_2m', { signal: AbortSignal.timeout(5000) })
+    if (omRes.ok) {
+      const omData = await omRes.json()
+      const ok = omData?.current?.temperature_2m != null
+      checks.push({ name: 'Open-Meteo API', status: ok ? 'ok' : 'error', message: ok ? `${omData.current.temperature_2m}°C 取得OK` : '応答が不正' })
+    } else {
+      checks.push({ name: 'Open-Meteo API', status: 'error', message: `HTTP ${omRes.status}` })
+    }
+  } catch { checks.push({ name: 'Open-Meteo API', status: 'error', message: 'タイムアウト/接続失敗' }) }
+
+  // 環境変数
+  const envOk = !!c.env.DB
+  checks.push({ name: '環境変数(DB)', status: envOk ? 'ok' : 'error', message: envOk ? '設定済み' : '未設定' })
+
+  // サーバー時刻
+  const now = new Date()
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '不明'
+  checks.push({ name: 'サーバー時刻', status: 'info', message: `${now.toISOString()} (${tz})` })
+
+  checks.push({ name: '診断日時', status: 'info', message: new Date().toLocaleString('ja-JP') })
+
+  // クリーンアップ
+  await c.env.DB.prepare('DELETE FROM sessions WHERE expires_at < datetime("now")').run()
+  await c.env.DB.prepare('DELETE FROM posts WHERE expires_at IS NOT NULL AND expires_at < datetime("now")').run()
+  await c.env.DB.prepare('DELETE FROM questions WHERE expires_at IS NOT NULL AND expires_at < datetime("now")').run()
 
   return c.json({ status: 'ok', checks, timestamp: new Date().toISOString() })
 })
