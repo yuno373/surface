@@ -61,7 +61,8 @@ img { display: block; max-width: 100%; }
 .msg-bubble {
   max-width: 75%; padding: 10px 14px;
   border-radius: 18px; font-size: 14px; line-height: 1.5;
-  word-break: break-word;
+  overflow-wrap: break-word; word-break: normal;
+  white-space: pre-wrap;
 }
 .msg-bubble.mine {
   background: #2d6a4f; color: white;
