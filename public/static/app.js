@@ -88,7 +88,7 @@ function renderSetupStep() {
       h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問3: 担任を持っていますか？</p><div class="flex gap-4 justify-center"><button onclick="setupHomeroom(true)" class="bg-blue-600 text-white px-8 py-3 rounded-xl text-lg font-semibold hover:bg-blue-700 transition">はい</button><button onclick="setupHomeroom(false)" class="bg-gray-200 text-gray-700 px-8 py-3 rounded-xl text-lg font-semibold hover:bg-gray-300 transition">いいえ</button></div></div>';
     } else if(setupStep===3) {
       h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問4: 何年何組の担任ですか？</p><div class="flex gap-3 justify-center items-center"><select id="setup-hr-year" class="form-input text-lg w-24 text-center"><option value="1">1年</option><option value="2">2年</option><option value="3">3年</option></select><span class="text-lg font-bold">年</span><select id="setup-hr-class" class="form-input text-lg w-24 text-center">';
-      for(let i=1;i<=9;i++) h+='<option value="'+i+'">'+i+'</option>';
+      for(let i=1;i<=4;i++) h+='<option value="'+i+'">'+i+'</option>';
       h+='</select><span class="text-lg font-bold">組</span></div><div class="mt-6"><button onclick="setupHomeroomClass()" class="bg-blue-600 text-white px-10 py-3 rounded-xl text-lg font-semibold hover:bg-blue-700 transition"><i class="fas fa-check mr-2"></i>決定</button></div></div>';
     } else if(setupStep===4) {
       h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問5: 担当教科は？</p><div class="flex gap-2 justify-center flex-wrap">';
@@ -114,7 +114,7 @@ function renderSetupStep() {
   } else {
     h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問1: お名前は？</p><input id="setup-name" type="text" class="form-input text-center text-lg" placeholder="例: 山田 太郎"></div>';
     h+='<div class="grid grid-cols-3 gap-2 mt-4"><div><label class="form-label">学年</label><select id="setup-grade" class="form-input"><option value="">選択</option><option value="1">1年</option><option value="2">2年</option><option value="3">3年</option></select></div><div><label class="form-label">クラス</label><select id="setup-class" class="form-input">';
-    for(let i=1;i<=9;i++) h+='<option value="'+i+'">'+i+'組</option>';
+    for(let i=1;i<=4;i++) h+='<option value="'+i+'">'+i+'組</option>';
     h+='</select></div><div><label class="form-label">番号</label><select id="setup-number" class="form-input">';
     for(let i=1;i<=50;i++) h+='<option value="'+i+'">'+i+'</option>';
     h+='</select></div></div>';
