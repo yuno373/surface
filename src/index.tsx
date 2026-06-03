@@ -358,7 +358,7 @@ const indexHtml = `<!DOCTYPE html>
     </div>
     <div class="flex items-center gap-2">
       <button onclick="navigateTo('notifications')" class="relative p-1.5 hover:bg-white/10 rounded-full">
-        <i class="fas fa-bell text-lg"></i>
+        <i class="fas fa-bell text-lg text-red-500"></i>
         <span id="notif-badge" class="hidden absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] min-w-[16px] h-4 rounded-full flex items-center justify-center px-1">0</span>
       </button>
       <div id="header-avatar" class="w-7 h-7 rounded-full bg-green-400 flex items-center justify-center text-xs font-bold">
