@@ -59,28 +59,84 @@ async function doInit() {
   catch(e) { errEl.textContent=e.message||'作成失敗'; errEl.classList.remove('hidden'); }
 }
 
+let setupStep=0,setupData={};
+
 function showSetupModal() {
   hideLogin();
-  const c=document.getElementById('setup-form-container');
-  const role=currentUser.role;
-  let h='<div class="space-y-4"><div><label class="form-label">名前</label><input id="setup-name" type="text" class="form-input"></div>';
-  if(role==='admin'||role==='teacher') {
-    h+='<div><label class="form-label">パスワード変更（任意）</label><input id="setup-password" type="password" class="form-input"></div>';
-    if(role==='teacher') h+='<div><label class="form-label">教科</label><input id="setup-subject" type="text" class="form-input"></div>';
-  } else {
-    h+='<div class="grid grid-cols-3 gap-2"><div><label class="form-label">学年</label><input id="setup-grade" type="number" class="form-input" min="1" max="3"></div><div><label class="form-label">クラス</label><input id="setup-class" type="number" class="form-input" min="1" max="9"></div><div><label class="form-label">番号</label><input id="setup-number" type="number" class="form-input" min="1" max="50"></div></div>';
-    h+='<div><label class="form-label">パスワード変更（任意）</label><input id="setup-password" type="password" class="form-input"></div>';
-  }
-  c.innerHTML=h; document.getElementById('setup-modal').classList.remove('hidden');
+  setupStep=0; setupData={};
+  document.getElementById('setup-modal').classList.remove('hidden');
+  renderSetupStep();
 }
 
+function renderSetupStep() {
+  const c=document.getElementById('setup-form-container');
+  const role=currentUser.role;
+  let h='<div class="mb-4 flex items-center gap-2 text-xs text-gray-400">';
+  const totalSteps=role==='admin'?4:role==='teacher'?5:2;
+  for(let i=0;i<totalSteps;i++) h+='<div class="w-3 h-3 rounded-full '+(i<=setupStep?'bg-blue-600':'bg-gray-200')+'"></div>';
+  h+='</div>';
+  if(role==='teacher') {
+    if(setupStep===0) {
+      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問1: お名前は？</p><input id="setup-name" type="text" class="form-input text-center text-lg" placeholder="例: 山田 太郎"><div class="mt-6"><button onclick="setupNextName()" class="bg-blue-600 text-white px-10 py-3 rounded-xl text-lg font-semibold hover:bg-blue-700 transition"><i class="fas fa-arrow-right mr-2"></i>次へ</button></div></div>';
+    } else if(setupStep===1) {
+      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問2: 担任を持っていますか？</p><div class="flex gap-4 justify-center"><button onclick="setupHomeroom(true)" class="bg-blue-600 text-white px-8 py-3 rounded-xl text-lg font-semibold hover:bg-blue-700 transition">はい</button><button onclick="setupHomeroom(false)" class="bg-gray-200 text-gray-700 px-8 py-3 rounded-xl text-lg font-semibold hover:bg-gray-300 transition">いいえ</button></div></div>';
+    } else if(setupStep===2) {
+      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問3: 担任は何組ですか？</p><div class="flex gap-2 justify-center flex-wrap">';
+      for(let i=1;i<=9;i++) h+='<button onclick="setupHomeroomClass('+i+')" class="bg-blue-600 text-white w-14 h-14 rounded-xl text-lg font-bold hover:bg-blue-700 transition">'+i+'</button>';
+      h+='</div></div>';
+    } else if(setupStep===3) {
+      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問4: 担当教科は？</p><div class="flex gap-2 justify-center flex-wrap">';
+      const subs=['国語','数学','社会','理科','英語','音楽','美術','体育','技術','家庭科','保健'];
+      subs.forEach(s=>h+='<button onclick="setupSubject(\''+s+'\')" class="bg-green-600 text-white px-6 py-3 rounded-xl text-lg font-semibold hover:bg-green-700 transition">'+s+'</button>');
+      h+='<button onclick="setupSubjectOther()" class="bg-gray-200 text-gray-700 px-6 py-3 rounded-xl text-lg font-semibold hover:bg-gray-300 transition">その他</button>';
+      h+='</div></div>';
+    } else if(setupStep===4) {
+      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問5: パスワードを変更しますか？</p><div class="space-y-3"><input id="setup-password" type="password" class="form-input text-center text-lg" placeholder="空欄のまま→変更しない"></div><p class="text-sm text-gray-400 mt-2">空欄のままだと現在のパスワードのままです</p></div><div class="mt-6 flex justify-center"><button onclick="submitSetup()" class="bg-blue-600 text-white px-10 py-3 rounded-xl text-lg font-semibold hover:bg-blue-700 transition"><i class="fas fa-check mr-2"></i>設定を完了する</button></div>';
+    }
+  } else if(role==='admin') {
+    if(setupStep===0) {
+      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問1: お名前は？</p><input id="setup-name" type="text" class="form-input text-center text-lg" placeholder="例: 山田 太郎"><div class="mt-6"><button onclick="setupNextName()" class="bg-blue-600 text-white px-10 py-3 rounded-xl text-lg font-semibold hover:bg-blue-700 transition"><i class="fas fa-arrow-right mr-2"></i>次へ</button></div></div>';
+    } else if(setupStep===1) {
+      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問2: あなたの役職は？</p><div class="flex gap-3 justify-center flex-wrap">';
+      h+='<button onclick="setupSubject(\'校長\')" class="bg-purple-600 text-white px-8 py-4 rounded-xl text-lg font-bold hover:bg-purple-700 transition"><i class="fas fa-crown mr-2"></i>校長</button>';
+      h+='<button onclick="setupSubject(\'教頭\')" class="bg-indigo-600 text-white px-8 py-4 rounded-xl text-lg font-bold hover:bg-indigo-700 transition"><i class="fas fa-user-tie mr-2"></i>教頭</button>';
+      h+='<button onclick="setupSubject(\'管理者\')" class="bg-gray-600 text-white px-8 py-4 rounded-xl text-lg font-bold hover:bg-gray-700 transition"><i class="fas fa-cog mr-2"></i>管理者</button>';
+      h+='</div></div>';
+    } else if(setupStep===2) {
+      h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問3: パスワードを変更しますか？</p><div class="space-y-3"><input id="setup-password" type="password" class="form-input text-center text-lg" placeholder="空欄のまま→変更しない"></div><p class="text-sm text-gray-400 mt-2">空欄のままだと現在のパスワードのままです</p></div><div class="mt-6 flex justify-center"><button onclick="submitSetup()" class="bg-blue-600 text-white px-10 py-3 rounded-xl text-lg font-semibold hover:bg-blue-700 transition"><i class="fas fa-check mr-2"></i>設定を完了する</button></div>';
+    }
+  } else {
+    h+='<div class="text-center py-4"><p class="text-lg font-bold mb-6">質問1: お名前は？</p><input id="setup-name" type="text" class="form-input text-center text-lg" placeholder="例: 山田 太郎"></div>';
+    h+='<div class="grid grid-cols-3 gap-2 mt-4"><div><label class="form-label">学年</label><select id="setup-grade" class="form-input"><option value="">選択</option><option value="1">1年</option><option value="2">2年</option><option value="3">3年</option></select></div><div><label class="form-label">クラス</label><select id="setup-class" class="form-input">';
+    for(let i=1;i<=9;i++) h+='<option value="'+i+'">'+i+'組</option>';
+    h+='</select></div><div><label class="form-label">番号</label><select id="setup-number" class="form-input">';
+    for(let i=1;i<=50;i++) h+='<option value="'+i+'">'+i+'</option>';
+    h+='</select></div></div>';
+    h+='<div class="mt-4"><label class="form-label">パスワード変更（任意）</label><input id="setup-password" type="password" class="form-input" placeholder="空欄→変更しない"></div>';
+    h+='<div class="mt-6 flex justify-center"><button onclick="submitSetup()" class="bg-blue-600 text-white px-10 py-3 rounded-xl text-lg font-semibold"><i class="fas fa-check mr-2"></i>設定を完了する</button></div>';
+  }
+  c.innerHTML=h;
+}
+
+function setupHomeroom(v){setupData.is_homeroom=v;if(v){setupStep=2;renderSetupStep();}else{setupData.homeroom_class=null;setupStep=3;renderSetupStep();}}
+function setupHomeroomClass(v){setupData.is_homeroom=true;setupData.homeroom_class=v;setupStep=3;renderSetupStep();}
+function setupSubject(v){setupData.subject=v;setupStep++;renderSetupStep();}
+function setupSubjectOther(){var v=prompt('教科名を入力してください');if(v&&v.trim()){setupData.subject=v.trim();setupStep++;renderSetupStep();}}
+function setupNextName(){var v=document.getElementById('setup-name')?.value.trim();if(!v){toast('名前を入力してください','error');return;}setupData.name=v;setupStep++;renderSetupStep();}
+
 async function submitSetup() {
-  const name=document.getElementById('setup-name')?.value.trim();
-  if(!name) { toast('名前を入力してください','error'); return; }
+  const nameEl=document.getElementById('setup-name');
+  const name=nameEl?nameEl.value.trim():setupData.name||'';
+  if(!name){toast('名前を入力してください','error');return;}
   const body={name,password:document.getElementById('setup-password')?.value||undefined};
   const role=currentUser.role;
-  if(role==='teacher') { body.subject=document.getElementById('setup-subject')?.value.trim(); }
-  else if(!['admin','teacher'].includes(role)) {
+  if(role==='teacher') {
+    if(setupData.is_homeroom!==undefined)body.is_homeroom=setupData.is_homeroom;
+    if(setupData.homeroom_class!==undefined)body.homeroom_class=setupData.homeroom_class;
+    if(setupData.subject)body.subject=setupData.subject;
+  } else if(role==='admin') {
+    if(setupData.subject)body.subject=setupData.subject;
+  } else {
     body.grade=parseInt(document.getElementById('setup-grade')?.value)||undefined;
     body.class_num=parseInt(document.getElementById('setup-class')?.value)||undefined;
     body.number=parseInt(document.getElementById('setup-number')?.value)||undefined;
