@@ -291,6 +291,24 @@ auth.post('/setup', async (c) => {
   return c.json({ success: true, user: enriched })
 })
 
+auth.post('/reset-setup', async (c) => {
+  const sessionId = getCookie(c, 'session')
+  if (!sessionId) return c.json({ error: 'Not authenticated' }, 401)
+  const session = await c.env.DB.prepare(
+    'SELECT * FROM sessions WHERE id = ? AND expires_at > datetime("now")'
+  ).bind(sessionId).first<any>()
+  if (!session) return c.json({ error: 'Session expired' }, 401)
+  const user = await c.env.DB.prepare(
+    'SELECT role, name FROM users WHERE id = ?'
+  ).bind(session.user_id).first<any>()
+  if (!user) return c.json({ error: 'User not found' }, 404)
+  if (user.role !== 'teacher' && user.role !== 'admin') return c.json({ error: '許可されていません' }, 403)
+  await c.env.DB.prepare(
+    "UPDATE users SET first_login = 1, name = '', is_homeroom = 0, homeroom_class = NULL, homeroom_year = NULL, subject = NULL, updated_at = datetime('now') WHERE id = ?"
+  ).bind(session.user_id).run()
+  return c.json({ success: true })
+})
+
 auth.all('/debug-env', async (c) => {
   const allKeys = Object.keys(process.env).sort()
   const filtered = allKeys.filter(k => k.includes('CF_') || k.includes('R2_') || k.includes('JWT') || k.includes('VAPID') || k.includes('PORT'))
