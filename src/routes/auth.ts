@@ -49,8 +49,9 @@ async function ensureTable(db: any) {
     reviewed_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-  )`).run()
+  )`).run().catch(() => {})
   await db.prepare("ALTER TABLE users ADD COLUMN homeroom_year INTEGER DEFAULT NULL").run().catch(() => {})
+  await db.prepare("ALTER TABLE users ADD COLUMN roles_text TEXT DEFAULT NULL").run().catch(() => {})
 }
 
 auth.post('/login', async (c) => {
@@ -88,6 +89,7 @@ auth.post('/login', async (c) => {
 })
 
 auth.get('/profile', async (c) => {
+  try { await ensureTable(c.env.DB) } catch {}
   const sessionId = getCookie(c, 'session')
   if (!sessionId) return c.json({ error: 'Not authenticated' }, 401)
   const session = await c.env.DB.prepare(
@@ -218,6 +220,7 @@ auth.post('/logout', async (c) => {
 })
 
 auth.get('/me', async (c) => {
+  try { await ensureTable(c.env.DB) } catch {}
   const sessionId = getCookie(c, 'session')
   if (!sessionId) return c.json({ error: 'Not authenticated' }, 401)
 
