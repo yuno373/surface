@@ -122,14 +122,20 @@ surveys.post('/', async (c) => {
     ).bind(surveyId, q.text, q.type || 'single', q.options ? JSON.stringify(q.options) : null, i).run()
   }
 
-  // 対象が委員会・部活の場合、該当カテゴリに自動投稿
-  if ((target === 'committee' || target === 'club') && target_value) {
-    const postCat = target === 'committee' ? 'committee' : 'club'
-    const content = (description ? description + '\n\n' : '') + '以下のリンクから回答してください。'
-    const postExpires = expires_at || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-    await c.env.DB.prepare(
-      'INSERT INTO posts (author_id, category, target, title, content, expires_at, is_important) VALUES (?, ?, ?, ?, ?, ?, 1)'
-    ).bind(user.id, postCat, target_value, '【アンケート】' + title, content, postExpires).run()
+  // 対象がクラス・委員会・部活の場合、該当カテゴリに自動投稿
+  if (target !== 'all' && target_value) {
+    let postCat: string
+    if (target === 'committee') postCat = 'committee'
+    else if (target === 'club') postCat = 'club'
+    else if (target === 'class') postCat = 'class'
+    else postCat = ''
+    if (postCat) {
+      const content = (description ? description + '\n\n' : '') + '以下のリンクから回答してください。'
+      const postExpires = expires_at || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+      await c.env.DB.prepare(
+        'INSERT INTO posts (author_id, category, target, title, content, expires_at, is_important) VALUES (?, ?, ?, ?, ?, ?, 1)'
+      ).bind(user.id, postCat, target_value, '【アンケート】' + title, content, postExpires).run()
+    }
   }
 
   return c.json({ success: true, survey_id: surveyId })
