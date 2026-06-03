@@ -130,7 +130,7 @@ surveys.post('/', async (c) => {
     else if (target === 'class') postCat = 'class'
     else postCat = ''
     if (postCat) {
-      const content = (description ? description + '\n\n' : '') + '以下のリンクから回答してください。'
+      const content = 'アンケートが作成されました。「上中連絡」タブの「アンケート」から回答できます。' + (description ? '\n\n' + description : '')
       const postExpires = expires_at || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
       await c.env.DB.prepare(
         'INSERT INTO posts (author_id, category, target, title, content, expires_at, is_important) VALUES (?, ?, ?, ?, ?, ?, 1)'
