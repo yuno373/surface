@@ -184,6 +184,20 @@ surveys.delete('/:id', async (c) => {
   return c.json({ success: true })
 })
 
+// アンケート強制終了
+surveys.post('/:id/close', async (c) => {
+  const user = await getUser(c)
+  const roles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !roles.some((r: string) => ['admin', 'teacher'].includes(r))) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+  const id = parseInt(c.req.param('id'))
+  await c.env.DB.prepare(
+    "UPDATE surveys SET expires_at = datetime('now') WHERE id = ?"
+  ).bind(id).run()
+  return c.json({ success: true })
+})
+
 // 回答送信
 surveys.post('/:id/answers', async (c) => {
   const user = await getUser(c)
