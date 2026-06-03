@@ -186,7 +186,7 @@ function buildNav() {
     const btn=document.createElement('button'); btn.className='nav-btn'; btn.id='nav-'+tab.id;
     let html='<i class="fas '+tab.icon+'"></i><span>'+tab.label+'</span>';
     if(tab.id==='messages')html='<div class="relative inline-flex"><i class="fas '+tab.icon+'"></i><span id="msg-badge" class="absolute -top-2 -right-3 bg-red-500 text-white text-[10px] min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1 hidden"></span></div><span>'+tab.label+'</span>';
-    if(tab.id==='notifications')html='<div class="relative inline-flex"><i class="fas '+tab.icon+'"></i><span id="notif-badge" class="absolute -top-2 -right-3 bg-red-500 text-white text-[10px] min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1 hidden"></span></div><span>'+tab.label+'</span>';
+    if(tab.id==='notifications')html='<div class="relative inline-flex"><i class="fas '+tab.icon+' text-red-500"></i><span id="notif-badge" class="absolute -top-2 -right-3 bg-red-500 text-white text-[10px] min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1 hidden"></span></div><span>'+tab.label+'</span>';
     btn.innerHTML=html;
     btn.onclick=()=>navigateTo(tab.id); nav.appendChild(btn);
   });
