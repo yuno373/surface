@@ -169,7 +169,7 @@ admin.post('/users/:id/toggle', async (c) => {
   await c.env.DB.prepare('ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1').run().catch(()=>{})
   const target = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(targetId).first<any>()
   if (!target) return c.json({ error: 'User not found' }, 404)
-  const newStatus = target.is_active === false ? 1 : 0
+  const newStatus = target.is_active ? 0 : 1
   await c.env.DB.prepare('UPDATE users SET is_active = ? WHERE id = ?').bind(newStatus, targetId).run()
   return c.json({ success: true, is_active: !!newStatus })
 })
