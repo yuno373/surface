@@ -160,6 +160,19 @@ admin.delete('/users/:id', async (c) => {
   return c.json({ success: true })
 })
 
+// ユーザー停止/復活
+admin.post('/users/:id/toggle', async (c) => {
+  const user = await getUser(c)
+  const myRoles = await getUserRoles(c.env.DB, user.id)
+  if (!user || !isAdmin(myRoles)) return c.json({ error: 'Forbidden' }, 403)
+  const targetId = parseInt(c.req.param('id'))
+  const target = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(targetId).first<any>()
+  if (!target) return c.json({ error: 'User not found' }, 404)
+  const newStatus = target.is_active === false ? 1 : 0
+  await c.env.DB.prepare('UPDATE users SET is_active = ? WHERE id = ?').bind(newStatus, targetId).run()
+  return c.json({ success: true, is_active: !!newStatus })
+})
+
 // ユーザー一括削除（学年・クラス指定）
 admin.post('/users/bulk-delete', async (c) => {
   const user = await getUser(c)
