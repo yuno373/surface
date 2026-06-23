@@ -70,6 +70,8 @@ auth.post('/login', async (c) => {
   const valid = await verifyPassword(password, user.password_hash)
   if (!valid) return c.json({ error: 'パスワードが違います' }, 401)
 
+  if (user.is_active === 0) return c.json({ error: 'このアカウントは停止されています' }, 403)
+
   const sessionId = generateSessionId()
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
 
