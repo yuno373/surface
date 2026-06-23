@@ -132,7 +132,7 @@ app.get('/api/disaster/current', async (c) => {
         for (const area of (at?.areas || [])) {
           if (area.code === '110010') {
             for (const w of (area.warnings || [])) {
-              if (w.code && JMA_WARNINGS[w.code]) warnings.push({ label: JMA_WARNINGS[w.code], code: w.code, level: WARN_LEVEL(w.code) })
+              if (w.code && w.status !== '解除' && JMA_WARNINGS[w.code]) warnings.push({ label: JMA_WARNINGS[w.code], code: w.code, level: WARN_LEVEL(w.code) })
             }
           }
         }
@@ -160,7 +160,11 @@ app.get('/api/disaster/current', async (c) => {
             }
             if (area.area?.code === '110010' && area.weathers) {
               const w = area.weathers[0] || ''
-              if (w.includes('激しく') || w.includes('非常に') || w.includes('雷')) {
+              if (w.includes('雷')) {
+                if (!heavyRain.some(h => h.startsWith('雷'))) heavyRain.push('雷注意')
+                maxFLevel = Math.max(maxFLevel, 2)
+              }
+              if (w.includes('激しく') || w.includes('非常に')) {
                 if (!heavyRain.some(h => h.startsWith('大雨'))) heavyRain.push('大雨注意')
                 maxFLevel = Math.max(maxFLevel, 2)
               }
