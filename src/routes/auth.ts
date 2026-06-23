@@ -14,11 +14,24 @@ async function hashPassword(password: string): Promise<string> {
 
 async function verifyPassword(password: string, hash: string): Promise<boolean> {
   const computed = await hashPassword(password)
-  if (hash.startsWith('$2a$10$demo')) return true
   return computed === hash
 }
 
 function generateSessionId(): string { return crypto.randomUUID() }
+
+const loginAttempts = new Map<string, { count: number; lockedUntil: number }>()
+const MAX_LOGIN_ATTEMPTS = 5
+const LOCKOUT_MINUTES = 15
+
+function trackFailedLogin(map: Map<string, { count: number; lockedUntil: number }>, key: string) {
+  const entry = map.get(key) || { count: 0, lockedUntil: 0 }
+  entry.count++
+  if (entry.count >= MAX_LOGIN_ATTEMPTS) {
+    entry.lockedUntil = Date.now() + LOCKOUT_MINUTES * 60 * 1000
+    entry.count = 0
+  }
+  map.set(key, entry)
+}
 
 async function getUserRoles(db: any, userId: number): Promise<string[]> {
   const roles = await db.prepare('SELECT role FROM user_roles WHERE user_id = ?').bind(userId).all<any>()
@@ -53,6 +66,7 @@ async function ensureTable(db: any) {
   await db.prepare("ALTER TABLE users ADD COLUMN homeroom_year INTEGER DEFAULT NULL").run().catch(() => {})
   await db.prepare("ALTER TABLE users ADD COLUMN roles_text TEXT DEFAULT NULL").run().catch(() => {})
   await db.prepare("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1").run().catch(() => {})
+  await db.prepare("ALTER TABLE notification_settings ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP").run().catch(() => {})
 }
 
 auth.post('/login', async (c) => {
@@ -61,16 +75,33 @@ auth.post('/login', async (c) => {
     return c.json({ error: 'ユーザー名とパスワードが必要です' }, 400)
   }
 
+  const ip = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown'
+  const attemptKey = `${ip}:${username}`
+  const now = Date.now()
+  const attempt = loginAttempts.get(attemptKey)
+  if (attempt && attempt.lockedUntil > now) {
+    const remaining = Math.ceil((attempt.lockedUntil - now) / 60000)
+    return c.json({ error: `ログインがロックされました。${remaining}分後にお試しください` }, 429)
+  }
+
   const user = await c.env.DB.prepare(
     'SELECT * FROM users WHERE username = ? OR name = ? OR login_id = ?'
   ).bind(username, username, username).first<any>()
 
-  if (!user) return c.json({ error: 'ユーザーが見つかりません' }, 401)
+  if (!user) {
+    trackFailedLogin(loginAttempts, attemptKey)
+    return c.json({ error: 'ユーザーが見つかりません' }, 401)
+  }
 
   const valid = await verifyPassword(password, user.password_hash)
-  if (!valid) return c.json({ error: 'パスワードが違います' }, 401)
+  if (!valid) {
+    trackFailedLogin(loginAttempts, attemptKey)
+    return c.json({ error: 'パスワードが違います' }, 401)
+  }
 
   if (user.is_active === 0) return c.json({ error: 'このアカウントは停止されています' }, 403)
+
+  loginAttempts.delete(attemptKey)
 
   const sessionId = generateSessionId()
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
@@ -173,7 +204,7 @@ auth.put('/profile', async (c) => {
       const existing = await c.env.DB.prepare(
         "SELECT id FROM profile_change_requests WHERE user_id = ? AND field_name = ? AND status = 'pending'"
       ).bind(session.user_id, field).first()
-      if (existing) continue // 既存のpendingを更新（削除して再作成）
+      if (existing) continue
       await c.env.DB.prepare(
         'INSERT INTO profile_change_requests (user_id, field_name, old_value, new_value) VALUES (?, ?, ?, ?)'
       ).bind(session.user_id, field, String(user[field] || ''), String(body[field])).run()
@@ -316,6 +347,15 @@ auth.post('/reset-setup', async (c) => {
 })
 
 auth.all('/debug-env', async (c) => {
+  const sessionId = getCookie(c, 'session')
+  if (!sessionId) return c.json({ error: 'Not authenticated' }, 401)
+  const session = await c.env.DB.prepare(
+    'SELECT * FROM sessions WHERE id = ? AND expires_at > datetime("now")'
+  ).bind(sessionId).first<any>()
+  if (!session) return c.json({ error: 'Session expired' }, 401)
+  const user = await c.env.DB.prepare('SELECT role FROM users WHERE id = ?').bind(session.user_id).first<any>()
+  if (!user || (user.role !== 'admin' && user.role !== 'teacher')) return c.json({ error: 'Forbidden' }, 403)
+
   const allKeys = Object.keys(process.env).sort()
   const filtered = allKeys.filter(k => k.includes('CF_') || k.includes('R2_') || k.includes('JWT') || k.includes('VAPID') || k.includes('PORT'))
   return c.json({ filtered, count: allKeys.length, sample: allKeys.slice(0, 20) })

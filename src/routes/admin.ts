@@ -405,6 +405,7 @@ admin.get('/diagnostics', async (c) => {
   let tableOk = 0, tableNg = 0
   for (const t of tables) {
     try {
+      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(t)) { tableNg++; continue }
       const r = await c.env.DB.prepare(`SELECT COUNT(*) as cnt FROM ${t}`).first<any>()
       checks.push({ name: `テーブル: ${t}`, status: 'ok', message: `${r?.cnt || 0}件` })
       tableOk++
@@ -534,13 +535,12 @@ admin.put('/notifications/settings', async (c) => {
   const body = await c.req.json()
   const { push_enabled, disaster_enabled, club_post_enabled, committee_post_enabled, school_notice_enabled, message_enabled, push_subscription } = body
 
-  // 複数購読を管理: push_subscriptions JSON配列に追加
+  // 複数購読を管理: push_subscriptions JSON配列として常に保存
   let subs: any[] = []
   if (push_subscription) {
     const existing = await c.env.DB.prepare('SELECT push_subscription FROM notification_settings WHERE user_id = ?').bind(user.id).first<any>()
     if (existing && existing.push_subscription) {
-      try { subs = JSON.parse(existing.push_subscription) } catch { subs = [] }
-      if (!Array.isArray(subs)) subs = [subs]
+      try { const parsed = JSON.parse(existing.push_subscription); subs = Array.isArray(parsed) ? parsed : [parsed] } catch { subs = [] }
     }
     const newSub = typeof push_subscription === 'string' ? JSON.parse(push_subscription) : push_subscription
     const idx = subs.findIndex((s: any) => s.endpoint === newSub.endpoint)
@@ -558,14 +558,14 @@ admin.put('/notifications/settings', async (c) => {
       WHERE user_id = ?
     `).bind(push_enabled ? 1 : 0, disaster_enabled ? 1 : 0, club_post_enabled ? 1 : 0,
       committee_post_enabled ? 1 : 0, school_notice_enabled ? 1 : 0, message_enabled ? 1 : 0,
-      subs.length > 0 ? JSON.stringify(subs) : (push_subscription || null), user.id).run()
+      subs.length > 0 ? JSON.stringify(subs) : null, user.id).run()
   } else {
     await c.env.DB.prepare(`
       INSERT INTO notification_settings (user_id, push_enabled, disaster_enabled, club_post_enabled, committee_post_enabled, school_notice_enabled, message_enabled, push_subscription)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(user.id, push_enabled ? 1 : 0, disaster_enabled ? 1 : 0, club_post_enabled ? 1 : 0,
       committee_post_enabled ? 1 : 0, school_notice_enabled ? 1 : 0, message_enabled ? 1 : 0,
-      subs.length > 0 ? JSON.stringify(subs) : (push_subscription || null)).run()
+      subs.length > 0 ? JSON.stringify(subs) : null).run()
   }
 
   return c.json({ success: true })

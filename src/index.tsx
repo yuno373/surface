@@ -55,7 +55,7 @@ app.use('*', async (c, next) => {
   await next()
 })
 
-app.use('/api/*', cors({ origin: '*', credentials: true }))
+app.use('/api/*', cors({ origin: ['https://surface-7tsp.onrender.com', 'http://localhost:3000'], credentials: true }))
 app.use('*', secureHeaders())
 
 app.route('/api/auth', auth)
@@ -243,7 +243,7 @@ const indexHtml = `<!DOCTYPE html>
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <link rel="icon" href="/icons/icon-192.png" type="image/png">
-  <link rel="stylesheet" href="/static/tailwind-compiled.css?v=1">
+  <link rel="stylesheet" href="/static/tailwind-compiled.css?v=7">
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css?v=7">
 </head>
