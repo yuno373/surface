@@ -400,7 +400,7 @@ const indexHtml = `<!DOCTYPE html>
 
 <div id="toast-container" class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none"></div>
 
-<script src="/static/app.js?v=6"></script>
+<script src="/static/app.js?v=8"></script>
 </body>
 </html>`
 
