@@ -446,17 +446,7 @@ admin.get('/diagnostics', async (c) => {
     checks.push({ name: 'JMA警報API', status: warnRes.ok ? 'ok' : 'error', message: warnRes.ok ? '取得OK' : `HTTP ${warnRes.status}` })
   } catch { checks.push({ name: 'JMA警報API', status: 'error', message: 'タイムアウト/接続失敗' }) }
 
-  // Open-Meteo API
-  try {
-    const omRes = await fetch('https://api.open-meteo.com/v1/forecast?latitude=35.8397&longitude=139.3912&current=temperature_2m', { signal: AbortSignal.timeout(5000) })
-    if (omRes.ok) {
-      const omData = await omRes.json()
-      const ok = omData?.current?.temperature_2m != null
-      checks.push({ name: 'Open-Meteo API', status: ok ? 'ok' : 'error', message: ok ? `${omData.current.temperature_2m}°C 取得OK` : '応答が不正' })
-    } else {
-      checks.push({ name: 'Open-Meteo API', status: 'error', message: `HTTP ${omRes.status}` })
-    }
-  } catch { checks.push({ name: 'Open-Meteo API', status: 'error', message: 'タイムアウト/接続失敗' }) }
+  // Open-Meteo API（サーバーIPがレート制限されるため診断対象外）
 
   // 環境変数
   const envOk = !!c.env.DB
