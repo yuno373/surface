@@ -52,6 +52,7 @@ async function ensureTable(db: any) {
   )`).run().catch(() => {})
   await db.prepare("ALTER TABLE users ADD COLUMN homeroom_year INTEGER DEFAULT NULL").run().catch(() => {})
   await db.prepare("ALTER TABLE users ADD COLUMN roles_text TEXT DEFAULT NULL").run().catch(() => {})
+  await db.prepare("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1").run().catch(() => {})
 }
 
 auth.post('/login', async (c) => {

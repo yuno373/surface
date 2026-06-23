@@ -42,8 +42,8 @@ admin.get('/users', async (c) => {
   if (!user || !isStaff(roles)) return c.json({ error: 'Forbidden' }, 403)
 
   const users = await c.env.DB.prepare(
-    `SELECT u.id, u.username, u.login_id, u.role, u.name, u.grade, u.class_num, u.number, u.club, u.committee, u.subject, 
-      u.is_homeroom, u.homeroom_class, u.homeroom_year, u.avatar_url, u.first_login, u.created_at,
+    `SELECT u.id, u.username, u.login_id, u.role, u.name, u.grade, u.class_num, u.number, u.club, u.committee, u.subject,
+      u.is_homeroom, u.homeroom_class, u.homeroom_year, u.avatar_url, u.first_login, u.created_at, u.is_active,
      (SELECT GROUP_CONCAT(role) FROM user_roles WHERE user_id = u.id) as all_roles
      FROM users u ORDER BY u.role, u.grade, u.class_num, u.number`
   ).all<any>()
@@ -166,6 +166,7 @@ admin.post('/users/:id/toggle', async (c) => {
   const myRoles = await getUserRoles(c.env.DB, user.id)
   if (!user || !isAdmin(myRoles)) return c.json({ error: 'Forbidden' }, 403)
   const targetId = parseInt(c.req.param('id'))
+  await c.env.DB.prepare('ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1').run().catch(()=>{})
   const target = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(targetId).first<any>()
   if (!target) return c.json({ error: 'User not found' }, 404)
   const newStatus = target.is_active === false ? 1 : 0
