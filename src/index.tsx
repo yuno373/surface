@@ -220,7 +220,7 @@ const SCALE_LABELS: Record<number, string> = {0:'0',1:'1',2:'2',3:'3',4:'4',45:'
 let _eqCache: { data: any; time: number } | null = null
 let _lastEqId = ''
 // 地震情報マージ（複数ソース中最速のものを採用）
-type EqResult = { id:string; isEew:boolean; time:string; type:string; magnitude:number|null; depth:string; location:string; maxScale:number; scaleLabel:string; isNew:boolean; serious:boolean }
+type EqResult = { id:string; isEew:boolean; time:string; type:string; magnitude:number|null; depth:string; location:string; maxScale:number; scaleLabel:string; isNew:boolean; serious:boolean; irumaScale:number; irumaScaleLabel:string; tsunamiText:string }
 async function _eqRace(): Promise<EqResult|null> {
   const sources = [_fetchP2PQuake(), _fetchWolfx(), _fetchYDITS()]
   const winner = await new Promise<EqResult|null>(resolve => {
@@ -233,6 +233,7 @@ async function _eqRace(): Promise<EqResult|null> {
   return winner
 }
 // P2PQuake: 地震情報＋EEW
+const TSUNAMI_MAP: Record<string, string> = {'None':'津波の心配はありません','Unknown':'津波情報不明','Checking':'津波調査中','Watch':'津波注意報','Warning':'津波警報','MajorWarning':'大津波警報'}
 async function _fetchP2PQuake(): Promise<EqResult|null> {
   try {
     const resp = await fetch('https://api.p2pquake.net/v2/history?codes=551&codes=556&limit=3', { signal: AbortSignal.timeout(3000) })
@@ -253,9 +254,21 @@ async function _fetchP2PQuake(): Promise<EqResult|null> {
     const id = top.id || top.time || ''
     const maxScale = eq?.maxScale ?? top.maxScale ?? -1
     const scaleLabel = SCALE_LABELS[maxScale] || ''
-    return { id, isEew, time: top.time || '', type: top.code === 551 ? (top.issue?.type||'地震情報') : '緊急地震速報（警報）', magnitude: eq?.magnitude ?? null, depth: eq?.hypocenter?.depth != null ? eq.hypocenter.depth + 'km' : '', location: eq?.hypocenter?.name || '', maxScale, scaleLabel, isNew: id !== _lastEqId, serious: isEew || maxScale >= 40 }
+    // 入間市の震度
+    let irumaScale = -1, irumaScaleLabel = ''
+    if (top.code === 551 && top.points) {
+      const iruma = top.points.find((p:any) => p.addr && p.addr.includes('入間'))
+      if (iruma) { irumaScale = iruma.scale; irumaScaleLabel = SCALE_LABELS[iruma.scale] || '' }
+    } else if (isEew && top.areas) {
+      const saitama = top.areas.find((a:any) => a.name && a.name.includes('埼玉'))
+      if (saitama) { irumaScale = saitama.scaleFrom; irumaScaleLabel = SCALE_LABELS[saitama.scaleFrom] || '' }
+    }
+    // 津波情報
+    const tsunamiText = eq?.domesticTsunami ? (TSUNAMI_MAP[eq.domesticTsunami] || eq.domesticTsunami) : ''
+    return { id, isEew, time: top.time || '', type: top.code === 551 ? (top.issue?.type||'地震情報') : '緊急地震速報（警報）', magnitude: eq?.magnitude ?? null, depth: eq?.hypocenter?.depth != null ? eq.hypocenter.depth + 'km' : '', location: eq?.hypocenter?.name || '', maxScale, scaleLabel, isNew: id !== _lastEqId, serious: isEew || maxScale >= 40, irumaScale, irumaScaleLabel, tsunamiText }
   } catch { return null }
 }
+const WOLFX_INT_MAP: Record<string, number> = {'1':10,'2':20,'3':30,'4':40,'5弱':45,'5強':50,'6弱':60,'6強':70,'7':80}
 // Wolfx: EEW専用（JMA公式）
 async function _fetchWolfx(): Promise<EqResult|null> {
   try {
@@ -263,9 +276,15 @@ async function _fetchWolfx(): Promise<EqResult|null> {
     if (!resp.ok) return null
     const d = await resp.json() as any
     if (!d?.EventID || !d?.Hypocenter) return null
-    const maxInt = typeof d.MaxIntensity === 'string' ? ({'1':10,'2':20,'3':30,'4':40,'5弱':45,'5強':50,'6弱':60,'6強':70,'7':80})[d.MaxIntensity] || -1 : -1
+    const maxInt = typeof d.MaxIntensity === 'string' ? (WOLFX_INT_MAP[d.MaxIntensity] || -1) : -1
     const id = d.EventID + '-' + (d.Serial||'0')
-    return { id, isEew: true, time: d.AnnouncedTime || '', type: '緊急地震速報', magnitude: d.Magunitude ?? null, depth: d.Depth != null ? d.Depth + 'km' : '', location: d.Hypocenter || '', maxScale: maxInt, scaleLabel: d.MaxIntensity || '', isNew: id !== _lastEqId, serious: true }
+    // 入間市（埼玉県南部）の予想震度
+    let irumaScale = -1, irumaScaleLabel = ''
+    if (d.WarnArea) {
+      const saitama = d.WarnArea.find((a:any) => a.Chiiki && a.Chiiki.includes('埼玉'))
+      if (saitama && saitama.Shindo1) { irumaScale = WOLFX_INT_MAP[saitama.Shindo1] || -1; irumaScaleLabel = saitama.Shindo1 }
+    }
+    return { id, isEew: true, time: d.AnnouncedTime || '', type: '緊急地震速報', magnitude: d.Magunitude ?? null, depth: d.Depth != null ? d.Depth + 'km' : '', location: d.Hypocenter || '', maxScale: maxInt, scaleLabel: d.MaxIntensity || '', isNew: id !== _lastEqId, serious: true, irumaScale, irumaScaleLabel, tsunamiText: '' }
   } catch { return null }
 }
 // YDITS: EEW発生中かどうかのみ
@@ -276,7 +295,7 @@ async function _fetchYDITS(): Promise<EqResult|null> {
     const d = await resp.json() as any
     if (d?.status !== 'OK' || !d?.isEew) return null
     const id = 'ydits-' + (d.time || Date.now())
-    return { id, isEew: true, time: d.time || '', type: '緊急地震速報（警報）', magnitude: null, depth: '', location: '', maxScale: -1, scaleLabel: '', isNew: id !== _lastEqId, serious: true }
+    return { id, isEew: true, time: d.time || '', type: '緊急地震速報（警報）', magnitude: null, depth: '', location: '', maxScale: -1, scaleLabel: '', isNew: id !== _lastEqId, serious: true, irumaScale: -1, irumaScaleLabel: '', tsunamiText: '' }
   } catch { return null }
 }
 app.get('/api/earthquake/current', async (c) => {
@@ -305,7 +324,9 @@ app.post('/api/earthquake/test', async (c) => {
     magnitude: body.magnitude || 5.0, depth: body.depth || '10km',
     location: body.location || '埼玉県南部', maxScale: body.scale || 60,
     scaleLabel: SCALE_LABELS[body.scale || 60] || '6弱',
-    isNew: true, serious: true
+    isNew: true, serious: true,
+    irumaScale: body.irumaScale || 50, irumaScaleLabel: body.irumaLabel || '5強',
+    tsunamiText: body.tsunami || '津波の心配はありません'
   }
   _eqCache = { data: { eq: testEq }, time: Date.now() }
   return c.json({ eq: testEq })
@@ -556,7 +577,7 @@ const indexHtml = `<!DOCTYPE html>
 
 <div id="toast-container" class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none"></div>
 
-<script src="/static/app.js?v=19"></script>
+<script src="/static/app.js?v=20"></script>
 </body>
 </html>`
 
