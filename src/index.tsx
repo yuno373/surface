@@ -280,6 +280,13 @@ async function _fetchYDITS(): Promise<EqResult|null> {
   } catch { return null }
 }
 app.get('/api/earthquake/current', async (c) => {
+  // テスト地震は長めにキャッシュ（全端末に届けるため5秒）
+  if (_eqCache && _eqCache.data?.eq?.id?.startsWith?.('test-') && Date.now() - _eqCache.time < 5000) {
+    const d = _eqCache.data
+    d.eq.isNew = d.eq.id !== _lastEqId
+    if (d.eq.id !== _lastEqId) _lastEqId = d.eq.id
+    return c.json(d)
+  }
   if (_eqCache && Date.now() - _eqCache.time < 500) return c.json(_eqCache.data)
   const result = await _eqRace()
   if (!result) return c.json({ eq: null })
@@ -300,6 +307,7 @@ app.post('/api/earthquake/test', async (c) => {
     scaleLabel: SCALE_LABELS[body.scale || 60] || '6弱',
     isNew: true, serious: true
   }
+  _eqCache = { data: { eq: testEq }, time: Date.now() }
   return c.json({ eq: testEq })
 })
 
