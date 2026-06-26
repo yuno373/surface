@@ -1,3 +1,4 @@
+// force deploy 1782485358460
 ﻿/* 上中黒板 v3.0 - メインアプリケーション */
 let currentUser = null, currentTab = null, currentThreadId = null;
 let reloadTimer = null, notifCheckTimer = null, clockTimer = null;
