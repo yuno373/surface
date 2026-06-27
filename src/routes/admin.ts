@@ -879,7 +879,8 @@ admin.post('/profile-changes/bulk-approve', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   let query = "SELECT * FROM profile_change_requests WHERE status = 'pending'"
   const params: any[] = []
-  if (body.user_id) { query += ' AND user_id = ?'; params.push(body.user_id) }
+  if (body.ids?.length) { query += ` AND id IN (${body.ids.map(() => '?').join(',')})`; params.push(...body.ids.map(Number)) }
+  else if (body.user_id) { query += ' AND user_id = ?'; params.push(body.user_id) }
 
   const pending = await c.env.DB.prepare(query).bind(...params).all<any>()
 
@@ -905,7 +906,8 @@ admin.post('/profile-changes/bulk-reject', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   let query = "UPDATE profile_change_requests SET status = 'rejected', reviewed_by = ?, reviewed_at = datetime('now') WHERE status = 'pending'"
   const params: any[] = [user.id]
-  if (body.user_id) { query += ' AND user_id = ?'; params.push(body.user_id) }
+  if (body.ids?.length) { query += ` AND id IN (${body.ids.map(() => '?').join(',')})`; params.push(...body.ids.map(Number)) }
+  else if (body.user_id) { query += ' AND user_id = ?'; params.push(body.user_id) }
 
   const result = await c.env.DB.prepare(query).bind(...params).run()
   return c.json({ success: true, count: result.meta?.changes || 0 })
