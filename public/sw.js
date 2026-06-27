@@ -1,5 +1,5 @@
 /* 上中黒板 Service Worker v4 - PWA */
-const CACHE_NAME = 'jochu-kokuban-v6';
+const CACHE_NAME = 'jochu-kokuban-v7';
 const STATIC_ASSETS = [
   '/',
   '/static/app.js',
@@ -34,6 +34,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   
+  // 外部リソース（CDN等）はSWでインターセプトしない
+  if (url.origin !== self.location.origin) return;
+  
   // APIリクエストはネットワーク優先
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
@@ -47,7 +50,6 @@ self.addEventListener('fetch', (event) => {
   // 静的アセットはキャッシュ優先
   event.respondWith(
     (async () => {
-      const url = new URL(event.request.url);
       // HTML is always network-first, fallback to cache
       if (event.request.mode === 'navigate' || url.pathname === '/') {
         try {
