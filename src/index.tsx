@@ -265,7 +265,9 @@ async function _fetchP2PQuake(): Promise<EqResult|null> {
     }
     // 津波情報
     const tsunamiText = eq?.domesticTsunami ? (TSUNAMI_MAP[eq.domesticTsunami] || eq.domesticTsunami) : ''
-    return { id, isEew, time: top.time || '', type: top.code === 551 ? (top.issue?.type||'地震情報') : '緊急地震速報（警報）', magnitude: eq?.magnitude ?? null, depth: eq?.hypocenter?.depth != null ? eq.hypocenter.depth + 'km' : '', location: eq?.hypocenter?.name || '', maxScale, scaleLabel, isNew: id !== _lastEqId, serious: isEew || maxScale >= 40, irumaScale, irumaScaleLabel, tsunamiText }
+    // 発生時刻を優先（top.time は配信時刻、earthquake.time/originTime が実際の地震発生日時）
+    const eqTime = isEew ? (top.earthquake?.originTime || top.time || '') : (top.earthquake?.time || top.time || '')
+    return { id, isEew, time: eqTime, type: top.code === 551 ? (top.issue?.type||'地震情報') : '緊急地震速報（警報）', magnitude: eq?.magnitude ?? null, depth: eq?.hypocenter?.depth != null ? eq.hypocenter.depth + 'km' : '', location: eq?.hypocenter?.name || '', maxScale, scaleLabel, isNew: id !== _lastEqId, serious: isEew || maxScale >= 40, irumaScale, irumaScaleLabel, tsunamiText }
   } catch { return null }
 }
 const WOLFX_INT_MAP: Record<string, number> = {'1':10,'2':20,'3':30,'4':40,'5弱':45,'5強':50,'6弱':60,'6強':70,'7':80}
@@ -284,7 +286,7 @@ async function _fetchWolfx(): Promise<EqResult|null> {
       const saitama = d.WarnArea.find((a:any) => a.Chiiki && a.Chiiki.includes('埼玉'))
       if (saitama && saitama.Shindo1) { irumaScale = WOLFX_INT_MAP[saitama.Shindo1] || -1; irumaScaleLabel = saitama.Shindo1 }
     }
-    return { id, isEew: true, time: d.AnnouncedTime || '', type: '緊急地震速報', magnitude: d.Magunitude ?? null, depth: d.Depth != null ? d.Depth + 'km' : '', location: d.Hypocenter || '', maxScale: maxInt, scaleLabel: d.MaxIntensity || '', isNew: id !== _lastEqId, serious: true, irumaScale, irumaScaleLabel, tsunamiText: '' }
+    return { id, isEew: true, time: d.OriginTime || d.AnnouncedTime || '', type: '緊急地震速報', magnitude: d.Magunitude ?? null, depth: d.Depth != null ? d.Depth + 'km' : '', location: d.Hypocenter || '', maxScale: maxInt, scaleLabel: d.MaxIntensity || '', isNew: id !== _lastEqId, serious: true, irumaScale, irumaScaleLabel, tsunamiText: '' }
   } catch { return null }
 }
 // YDITS: EEW発生中かどうかのみ
@@ -577,7 +579,7 @@ const indexHtml = `<!DOCTYPE html>
 
 <div id="toast-container" class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none"></div>
 
-<script src="/static/app.js?v=20"></script>
+<script src="/static/app.js?v=21"></script>
 </body>
 </html>`
 
