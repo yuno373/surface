@@ -81,24 +81,30 @@ self.addEventListener('push', (event) => {
     if (event.data) data = { ...data, ...event.data.json() };
   } catch {}
 
+  const isEmergency = data.level === 'emergency';
   const options = {
     body: data.body,
     icon: '/icons/icon-192.png',
     badge: '/icons/badge-72.png',
     tag: data.type || 'normal',
-    data: { url: '/' },
-    requireInteraction: data.type === 'disaster',
-    vibrate: data.type === 'disaster' ? [300, 100, 300, 100, 300] : [200, 100],
+    data: { url: data.url || '/' },
+    requireInteraction: isEmergency || data.type === 'disaster',
+    vibrate: isEmergency ? [500, 200, 500, 200, 500, 200, 1000, 500, 1000] : (data.type === 'disaster' ? [300, 100, 300, 100, 300] : [200, 100]),
     actions: [
       { action: 'open', title: '開く' },
       { action: 'close', title: '閉じる' }
     ]
   };
 
-  // 防災情報は緊急スタイル
   if (data.type === 'disaster') {
     options.badge = '/icons/badge-72.png';
     options.renotify = true;
+  }
+
+  if (isEmergency) {
+    options.renotify = true;
+    options.tag = 'earthquake-emergency-' + Date.now();
+    options.silent = false;
   }
 
   event.waitUntil(

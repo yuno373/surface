@@ -219,7 +219,7 @@ app.get('/api/disaster/current', async (c) => {
 const SCALE_LABELS: Record<number, string> = {0:'0',1:'1',2:'2',3:'3',4:'4',45:'5弱',46:'5強',50:'5弱',55:'5強',60:'6弱',66:'6強',70:'6弱',77:'6強',80:'7'}
 let _eqCache: { data: any; time: number } | null = null
 let _lastEqId = ''
-// 地震プッシュ通知
+// 地震プッシュ通知（震度5以上は emergency レベルでサイレン）
 async function pushEarthquakeAlert(eq: any, db: any) {
   try {
     const rows = await db.prepare(
@@ -228,7 +228,8 @@ async function pushEarthquakeAlert(eq: any, db: any) {
     if (!rows.results?.length) return
     const title = eq.isEew ? '🚨 緊急地震速報' : '📢 地震情報'
     const body = eq.location + (eq.magnitude != null ? ' M' + eq.magnitude : '') + (eq.scaleLabel ? ' 震度' + eq.scaleLabel : '')
-    const payload = JSON.stringify({ title, body, type: 'disaster', url: '/' })
+    const level = eq.maxScale >= 45 ? 'emergency' : 'warning'
+    const payload = JSON.stringify({ title, body, type: 'disaster', level, url: '/' })
     await Promise.allSettled(rows.results.map((r: any) => {
       let subs: any[] = []
       try { const p = JSON.parse(r.push_subscription); if (Array.isArray(p)) subs.push(...p); else subs.push(p) } catch { return }
@@ -598,7 +599,7 @@ const indexHtml = `<!DOCTYPE html>
 
 <div id="toast-container" class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none"></div>
 
-<script src="/static/app.js?v=25"></script>
+<script src="/static/app.js?v=26"></script>
 </body>
 </html>`
 

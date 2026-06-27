@@ -1,5 +1,11 @@
 import { Hono } from 'hono'
 import { getCookie } from 'hono/cookie'
+import webpush from 'web-push'
+
+const vapidKey = process.env.VAPID_PUBLIC_KEY || ''
+const vprKey = process.env.VAPID_PRIVATE_KEY || ''
+const vsub = process.env.VAPID_SUBJECT || 'mailto:admin@example.com'
+if (vapidKey && vprKey) webpush.setVapidDetails(vsub, vapidKey, vprKey)
 
 type Bindings = { DB: any }
 const questions = new Hono<{ Bindings: Bindings }>()
@@ -184,6 +190,29 @@ questions.put('/consultations/:id/reply', async (c) => {
   await c.env.DB.prepare(
     'UPDATE consultations SET reply = ?, replied_at = datetime("now"), status = "closed" WHERE id = ?'
   ).bind(reply, cId).run()
+
+  // 通知作成＋プッシュ
+  try {
+    const consult = await c.env.DB.prepare(
+      'SELECT student_id FROM consultations WHERE id = ?'
+    ).bind(cId).first<any>()
+    if (consult) {
+      await c.env.DB.prepare(
+        'INSERT INTO notifications (user_id, type, title, body, created_by) VALUES (?, ?, ?, ?, ?)'
+      ).bind(consult.student_id, 'consultation:' + cId, '相談所から回答がありました', reply?.substring(0, 80) || '', user.id).run()
+      if (vapidKey) {
+        const pushRow = await c.env.DB.prepare(
+          "SELECT push_subscription FROM notification_settings WHERE user_id = ? AND push_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
+        ).bind(consult.student_id).first<any>()
+        if (pushRow?.push_subscription) {
+          const payload = JSON.stringify({ title: '相談所から回答があります', body: reply?.substring(0, 80) || '', type: 'normal' })
+          let subs: any[] = []
+          try { const p = JSON.parse(pushRow.push_subscription); if (Array.isArray(p)) subs.push(...p); else subs.push(p) } catch {}
+          Promise.allSettled(subs.map(s => webpush.sendNotification(s, payload).catch(() => {})))
+        }
+      }
+    }
+  } catch {}
 
   return c.json({ success: true })
 })

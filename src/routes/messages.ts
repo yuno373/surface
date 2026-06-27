@@ -1,5 +1,11 @@
 import { Hono } from 'hono'
 import { getCookie } from 'hono/cookie'
+import webpush from 'web-push'
+
+const vapidKey = process.env.VAPID_PUBLIC_KEY || ''
+const vprKey = process.env.VAPID_PRIVATE_KEY || ''
+const vsub = process.env.VAPID_SUBJECT || 'mailto:admin@example.com'
+if (vapidKey && vprKey) webpush.setVapidDetails(vsub, vapidKey, vprKey)
 
 type Bindings = { DB: any }
 const messages = new Hono<{ Bindings: Bindings }>()
@@ -336,7 +342,7 @@ messages.post('/threads/:threadId/messages', async (c) => {
     'INSERT INTO messages (thread_id, sender_id, content, file_url, file_type) VALUES (?, ?, ?, ?, ?)'
   ).bind(threadId, user.id, content || '', file_url || null, file_type || null).run()
 
-  // DB通知レコードを作成（非同期・fire-and-forget）
+  // DB通知＋プッシュ通知（非同期・fire-and-forget）
   try {
     const thread = await c.env.DB.prepare('SELECT * FROM message_threads WHERE id = ?').bind(threadId).first<any>()
     const members = await c.env.DB.prepare(
@@ -345,10 +351,23 @@ messages.post('/threads/:threadId/messages', async (c) => {
     if (members.results.length > 0) {
       const preview = (content || file_url || '').substring(0, 80)
       const notifTitle = (thread?.name || 'メッセージ') + ': ' + user.name
-      Promise.all(members.results.map(m =>
+      const memberIds = members.results.map(m => m.user_id)
+      Promise.all(memberIds.map(uid =>
         c.env.DB.prepare('INSERT INTO notifications (user_id, type, title, body, created_by) VALUES (?, ?, ?, ?, ?)')
-          .bind(m.user_id, 'message:' + threadId, notifTitle, preview, user.id).run()
+          .bind(uid, 'message:' + threadId, notifTitle, preview, user.id).run()
       )).catch(() => {})
+      if (vapidKey) {
+        const placeholders = memberIds.map(() => '?').join(',')
+        const pushRows = await c.env.DB.prepare(
+          `SELECT push_subscription FROM notification_settings WHERE user_id IN (${placeholders}) AND push_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''`
+        ).bind(...memberIds).all<any>()
+        const pushPayload = JSON.stringify({ title: notifTitle, body: preview, type: 'message' })
+        Promise.allSettled(pushRows.results.map((pu: any) => {
+          let subs: any[] = []
+          try { const p = JSON.parse(pu.push_subscription); if (Array.isArray(p)) subs.push(...p); else subs.push(p) } catch { return Promise.resolve() }
+          return Promise.allSettled(subs.map(s => webpush.sendNotification(s, pushPayload).catch(() => {})))
+        })).catch(() => {})
+      }
     }
   } catch {}
 
