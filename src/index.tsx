@@ -346,12 +346,11 @@ app.get('/api/weather/wn', async (c) => {
     const resp = await fetch('http://weathernews.jp/api/weather.cgi?slat=35.8397&slon=139.3912&langid=ja', { signal: AbortSignal.timeout(5000) })
     const xml = await resp.text()
     const g = (s: string) => { const m = xml.match(new RegExp('<' + s + '>([^<]+)</' + s + '>')); return m ? m[1].trim() : '' }
-    const tempF = parseFloat(g('temperature'))
-    const tempC = Math.round((tempF - 32) * 5 / 9)
+    const tempC = Math.round(parseFloat(g('temperature')))
     const humidity = parseInt(g('humidity')) || 0
     const icon = g('weathericon')
-    const precipIn = parseFloat(g('precip'))
-    const precipMm = Math.round(precipIn * 25.4 * 10) / 10
+    const precip = parseFloat(g('precip')) || 0
+    const precipMm = Math.round(precip * 10) / 10
     const maxTemp = parseInt(g('max_temp')) || 0
     const minTemp = parseInt(g('min_temp')) || 0
     const result = {
@@ -581,7 +580,7 @@ const indexHtml = `<!DOCTYPE html>
 
 <div id="toast-container" class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none"></div>
 
-<script src="/static/app.js?v=23"></script>
+<script src="/static/app.js?v=24"></script>
 </body>
 </html>`
 
