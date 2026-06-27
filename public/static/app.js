@@ -850,7 +850,7 @@ async function loadSelfNotifications(){const c=document.getElementById('notif-li
 async function submitSelfNotification(){const msg=document.getElementById('self-notif-msg').value.trim();if(!msg){toast('メッセージを入力','error');return;}const scheduled=document.getElementById('self-notif-time').value||null;try{await api('/api/admin/notifications/self',{method:'POST',body:{message:msg,scheduled_at:scheduled?new Date(scheduled).toISOString():null}});document.getElementById('self-notif-msg').value='';document.getElementById('self-notif-time').value='';toast('作成しました','success');loadSelfNotifications();}catch(e){toast(e.message||'失敗','error');}}
 
 async function deleteSelfNotif(id){try{const r=await api('/api/notifications/'+id+'/read',{method:'POST'});loadSelfNotifications();}catch{}}
-async function testPush(){try{const r=await api('/api/admin/notifications/test',{method:'POST'});if(r.error){toast(r.error+(r.endpoint?' ['+r.endpoint+']':''),'error');return;}toast(r.message+(r.devices?' ['+r.devices+']':''),'success');}catch(e){toast('失敗: '+(e.message||'エラー'),'error');}}
+async function testPush(){try{const r=await api('/api/admin/notifications/test',{method:'POST'});if(r.error){if(r.error.includes('購読データがありません')){showModal('プッシュ通知','<div class="text-center space-y-3"><i class="fas fa-bell-slash text-gray-400 text-5xl"></i><p class="text-gray-600">通知がオンになっていません。</p><button onclick="requestPushPermission();closeModal()" class="bg-blue-600 text-white px-6 py-2 rounded-xl font-semibold mt-2">通知をオンにする</button></div>',[]);return;}toast(r.error,'error');return;}toast(r.message,'success');}catch(e){toast('テスト失敗: '+(e.message||'エラー'),'error');}}
 
 let _lastNotifId = 0
 let _lastNotifInit = false

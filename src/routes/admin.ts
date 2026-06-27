@@ -2,6 +2,13 @@ import { Hono } from 'hono'
 import { getCookie } from 'hono/cookie'
 import webpush from 'web-push'
 
+const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || ''
+const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || ''
+const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:admin@example.com'
+if (vapidPublicKey && vapidPrivateKey) {
+  webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey)
+}
+
 type Bindings = { DB: any }
 const admin = new Hono<{ Bindings: Bindings }>()
 
@@ -611,19 +618,30 @@ admin.post('/notifications/test', async (c) => {
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
+  if (!vapidPublicKey || !vapidPrivateKey) {
+    return c.json({ error: 'サーバーでVAPID鍵が設定されていません。管理者に連絡してください' })
+  }
+
   const subRow = await c.env.DB.prepare(
     "SELECT push_subscription FROM notification_settings WHERE user_id = ? AND push_subscription IS NOT NULL AND push_subscription != ''"
   ).bind(user.id).first<any>()
-  if (!subRow || !subRow.push_subscription) return c.json({ error: '購読データがありません。通知をオンにしてください' })
+  if (!subRow || !subRow.push_subscription) {
+    return c.json({ error: '購読データがありません。設定→通知→プッシュ通知をオンにしてください' })
+  }
 
   const subs: any[] = []
   try {
     const parsed = JSON.parse(subRow.push_subscription)
     if (Array.isArray(parsed)) subs.push(...parsed)
     else subs.push(parsed)
-  } catch { return c.json({ error: '購読データが破損しています。設定から通知をオンにし直してください' }) }
+  } catch {
+    return c.json({ error: '購読データが破損しています。設定→通知→プッシュ通知をオフ→オンにし直してください' })
+  }
 
-  const epSummary = subs.map((s:any,i:number)=>`${i+1}:${(s.endpoint||'').replace(/https:\/\//,'').split('/')[0]}`).join(', ')
+  if (!subs.length) {
+    return c.json({ error: '有効な購読デバイスがありません。プッシュ通知をオンにし直してください' })
+  }
+
   let sent = 0; let errors: string[] = []
   for (const sub of subs) {
     try {
@@ -636,9 +654,13 @@ admin.post('/notifications/test', async (c) => {
     }
   }
 
-  if (sent > 0) return c.json({ success: true, message: `${sent}件/${subs.length}のデバイスに送信しました${errors.length ? `（${errors.length}件失敗）` : ''}`, devices: epSummary })
+  if (sent > 0) {
+    const msg = `${sent}台のデバイスに送信しました${errors.length ? `（${errors.length}台失敗）` : ''}`
+    return c.json({ success: true, message: msg })
+  }
+
   const allErrors = errors.join(' | ')
-  return c.json({ error: 'プッシュ送信失敗: ' + allErrors, endpoint: subs[0]?.endpoint?.replace(/[?&].*$/,'').substring(0,120) || '' })
+  return c.json({ error: 'プッシュ送信失敗: ' + allErrors })
 })
 
 // 自分通知一覧
