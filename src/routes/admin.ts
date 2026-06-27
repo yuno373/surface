@@ -653,7 +653,7 @@ admin.post('/notifications/test', async (c) => {
       const kept = valid.filter(Boolean)
       if (kept.length !== subs.length) {
         const val = kept.length > 0 ? JSON.stringify(kept) : null
-        await c.env.DB.prepare('UPDATE notification_settings SET push_subscription = ? WHERE user_id = ?').bind(val, row.user_id).catch(() => {})
+        await c.env.DB.prepare('UPDATE notification_settings SET push_subscription = ? WHERE user_id = ?').bind(val, row.user_id).run().catch(() => {})
       }
     }
 
