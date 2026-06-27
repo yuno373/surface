@@ -178,18 +178,25 @@ posts.post('/', async (c) => {
     if (vapidPublicKey) {
       let pushSql: string|undefined, pushParams: any[] = []
       if (category === 'school_notice') {
-        pushSql = "SELECT push_subscription FROM notification_settings WHERE school_notice_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
+        pushSql = "SELECT user_id, push_subscription FROM notification_settings WHERE school_notice_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
       } else if ((category === 'club' || category === 'committee') && target) {
-        pushSql = `SELECT ns.push_subscription FROM notification_settings ns JOIN users u ON ns.user_id = u.id WHERE ns.${category}_post_enabled = 1 AND ns.push_subscription IS NOT NULL AND ns.push_subscription != '' AND u.${category} = ?`
+        pushSql = `SELECT ns.user_id, ns.push_subscription FROM notification_settings ns JOIN users u ON ns.user_id = u.id WHERE ns.${category}_post_enabled = 1 AND ns.push_subscription IS NOT NULL AND ns.push_subscription != '' AND u.${category} = ?`
         pushParams = [target]
       }
       if (pushSql) {
         const pushRows = await c.env.DB.prepare(pushSql).bind(...pushParams).all<any>()
         const pushPayload = JSON.stringify({ title: '上中黒板', body: notifMessage, type: 'post' })
-        Promise.allSettled(pushRows.results.map(pu => {
-          const subs: any[] = []
-          try { const parsed = JSON.parse(pu.push_subscription); if (Array.isArray(parsed)) subs.push(...parsed); else subs.push(parsed) } catch { return Promise.resolve() }
-          return Promise.allSettled(subs.map(sub => webpush.sendNotification(sub, pushPayload).catch(() => {})))
+        Promise.allSettled(pushRows.results.map(async (pu: any) => {
+          let subs: any[] = []
+          try { const p = JSON.parse(pu.push_subscription); if (Array.isArray(p)) subs.push(...p); else subs.push(p) } catch { return }
+          const valid = await Promise.all(subs.map(async s => {
+            try { await webpush.sendNotification(s, pushPayload); return s } catch (e: any) { const sc = e.statusCode || e.errors?.[0]?.statusCode; if (sc === 410 || sc === 404) return null; return s }
+          }))
+          const kept = valid.filter(Boolean)
+          if (kept.length !== subs.length && pu.user_id) {
+            const val = kept.length > 0 ? JSON.stringify(kept) : null
+            await c.env.DB.prepare('UPDATE notification_settings SET push_subscription = ? WHERE user_id = ?').bind(val, pu.user_id).catch(() => {})
+          }
         })).catch(() => {})
       }
     }

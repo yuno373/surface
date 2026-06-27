@@ -223,17 +223,24 @@ let _lastEqId = ''
 async function pushEarthquakeAlert(eq: any, db: any) {
   try {
     const rows = await db.prepare(
-      "SELECT push_subscription FROM notification_settings WHERE push_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
+      "SELECT user_id, push_subscription FROM notification_settings WHERE push_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
     ).all<any>()
     if (!rows.results?.length) return
     const title = eq.isEew ? '🚨 緊急地震速報' : '📢 地震情報'
     const body = eq.location + (eq.magnitude != null ? ' M' + eq.magnitude : '') + (eq.scaleLabel ? ' 震度' + eq.scaleLabel : '')
     const level = eq.maxScale >= 45 ? 'emergency' : 'warning'
     const payload = JSON.stringify({ title, body, type: 'disaster', level, url: '/' })
-    await Promise.allSettled(rows.results.map((r: any) => {
+    await Promise.allSettled(rows.results.map(async (r: any) => {
       let subs: any[] = []
       try { const p = JSON.parse(r.push_subscription); if (Array.isArray(p)) subs.push(...p); else subs.push(p) } catch { return }
-      return Promise.allSettled(subs.map(s => webpush.sendNotification(s, payload).catch(() => {})))
+      const valid = await Promise.all(subs.map(async s => {
+        try { await webpush.sendNotification(s, payload); return s } catch (e: any) { const sc = e.statusCode || e.errors?.[0]?.statusCode; if (sc === 410 || sc === 404) return null; return s }
+      }))
+      const kept = valid.filter(Boolean)
+      if (kept.length !== subs.length) {
+        const val = kept.length > 0 ? JSON.stringify(kept) : null
+        await db.prepare('UPDATE notification_settings SET push_subscription = ? WHERE user_id = ?').bind(val, r.user_id).run()
+      }
     }))
   } catch {}
 }
