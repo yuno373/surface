@@ -311,6 +311,8 @@ app.get('/api/earthquake/current', async (c) => {
   if (_eqCache && Date.now() - _eqCache.time < 500) return c.json(_eqCache.data)
   const result = await _eqRace()
   if (!result) return c.json({ eq: null })
+  // 震度3以下は表示しない（EEWは除く）
+  if (!result.isEew && result.maxScale > 0 && result.maxScale <= 30) return c.json({ eq: null })
   result.isNew = result.id !== _lastEqId
   if (result.id !== _lastEqId) _lastEqId = result.id
   _eqCache = { data: { eq: result }, time: Date.now() }
@@ -579,7 +581,7 @@ const indexHtml = `<!DOCTYPE html>
 
 <div id="toast-container" class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none"></div>
 
-<script src="/static/app.js?v=22"></script>
+<script src="/static/app.js?v=23"></script>
 </body>
 </html>`
 
