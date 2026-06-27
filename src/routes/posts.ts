@@ -346,13 +346,15 @@ posts.get('/:id/readers', async (c) => {
 })
 
 function checkPostPermission(roles: string[], user: any, category: string, target: string): boolean {
+  // 掲示板は管理者のみ
+  if (category === 'bulletin') return roles.includes('admin')
+  // 上中連絡は管理者と先生のみ
+  if (category === 'school_notice') return roles.some((r: string) => ['admin', 'teacher'].includes(r))
   // 管理者と先生は全カテゴリに投稿可
   if (roles.some((r: string) => ['admin', 'teacher'].includes(r))) return true
   // 生徒会は club/committee/lost_item に投稿可
   const isStudentCouncil = roles.includes('student_council')
   if (isStudentCouncil && ['club', 'committee', 'lost_item'].includes(category)) return true
-  // 掲示板・上中連絡は管理者のみ
-  if (['bulletin', 'school_notice'].includes(category)) return false
   // 忘れ物: 部長・委員長・副部長・副委員長
   if (category === 'lost_item') {
     return roles.some((r: string) => ['captain', 'chairman', 'vice_captain', 'vice_chairman'].includes(r))
