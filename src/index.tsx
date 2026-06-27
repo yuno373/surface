@@ -333,7 +333,10 @@ app.get('/api/earthquake/current', async (c) => {
     if (d.eq.id !== _lastEqId) _lastEqId = d.eq.id
     return c.json(d)
   }
-  if (_eqCache && Date.now() - _eqCache.time < 500) return c.json(_eqCache.data)
+  if (_eqCache && Date.now() - _eqCache.time < 500) {
+    _eqCache.data.eq.isNew = _eqCache.data.eq.id !== _lastEqId
+    return c.json(_eqCache.data)
+  }
   const result = await _eqRace()
   if (!result) return c.json({ eq: null })
   // 震度3以下は表示しない（EEWは除く）
