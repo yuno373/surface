@@ -318,7 +318,6 @@ app.get('/api/earthquake/current', async (c) => {
 })
 app.post('/api/earthquake/test', async (c) => {
   const body = await c.req.json().catch(() => ({}))
-  _lastEqId = ''
   _eqCache = null
   const testEq = {
     id: 'test-' + Date.now(), isEew: body.type === 'eew', time: new Date().toISOString(),
@@ -330,6 +329,7 @@ app.post('/api/earthquake/test', async (c) => {
     irumaScale: body.irumaScale || 50, irumaScaleLabel: body.irumaLabel || '5強',
     tsunamiText: body.tsunami || '津波の心配はありません'
   }
+  _lastEqId = testEq.id
   _eqCache = { data: { eq: testEq }, time: Date.now() }
   return c.json({ eq: testEq })
 })
@@ -579,7 +579,7 @@ const indexHtml = `<!DOCTYPE html>
 
 <div id="toast-container" class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none"></div>
 
-<script src="/static/app.js?v=21"></script>
+<script src="/static/app.js?v=22"></script>
 </body>
 </html>`
 
