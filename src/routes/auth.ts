@@ -182,25 +182,41 @@ auth.put('/profile', async (c) => {
     return c.json({ success: true, direct: true })
   }
 
-  // 期限チェック
-  const deadlineSetting = await c.env.DB.prepare("SELECT value FROM admin_settings WHERE key = 'allow_changes_until'").first<any>()
-  if (deadlineSetting?.value) {
-    const deadline = new Date(deadlineSetting.value)
-    if (Date.now() > deadline.getTime()) {
-      return c.json({ error: 'プロフィール変更の受付期間は終了しました' }, 403)
-    }
-  }
-
-  // 生徒は承認制
+  // 生徒の処理
   await ensureTable(c.env.DB)
   const user = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(session.user_id).first<any>()
   if (!user) return c.json({ error: 'User not found' }, 404)
 
+  // 直接編集期間チェック（期間内は承認不要で直接更新）
+  const deadlineSetting = await c.env.DB.prepare("SELECT value FROM admin_settings WHERE key = 'allow_changes_until'").first<any>()
+  let directEdit = false
+  if (deadlineSetting?.value) {
+    const deadline = new Date(deadlineSetting.value)
+    directEdit = Date.now() <= deadline.getTime()
+  }
+  if (directEdit) {
+    const editable = ['name', 'grade', 'class_num', 'number', 'club', 'committee'] as const
+    const updates: string[] = []; const params: any[] = []
+    for (const field of editable) {
+      if (body[field] !== undefined && String(body[field]) !== String(user[field] || '')) {
+        updates.push(`${field} = ?`); params.push(body[field])
+      }
+    }
+    if (updates.length > 0) {
+      params.push(session.user_id)
+      await c.env.DB.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run()
+    }
+    // bioとavatar_urlも直接更新
+    if (body.bio !== undefined) await c.env.DB.prepare('UPDATE users SET bio = ? WHERE id = ?').bind(body.bio, session.user_id).run()
+    if (body.avatar_url !== undefined) await c.env.DB.prepare('UPDATE users SET avatar_url = ? WHERE id = ?').bind(body.avatar_url, session.user_id).run()
+    return c.json({ success: true, direct: true })
+  }
+
+  // 期間外は承認リクエスト（常時送信可）
   const needApprovalFields = ['name', 'grade', 'class_num', 'number', 'club', 'committee'] as const
   let hasPending = false
   for (const field of needApprovalFields) {
     if (body[field] !== undefined && String(body[field]) !== String(user[field] || '')) {
-      // 同じフィールドのpendingリクエストが既にあるか確認
       const existing = await c.env.DB.prepare(
         "SELECT id FROM profile_change_requests WHERE user_id = ? AND field_name = ? AND status = 'pending'"
       ).bind(session.user_id, field).first()
