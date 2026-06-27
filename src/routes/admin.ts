@@ -602,59 +602,66 @@ admin.post('/notifications/broadcast', async (c) => {
 })
 
 async function pushToSubs(subRow: any, payload: string, db?: any) {
-  const subs: any[] = []
   try {
-    const parsed = JSON.parse(subRow.push_subscription)
-    if (Array.isArray(parsed)) subs.push(...parsed)
-    else subs.push(parsed)
-  } catch { return }
-  const validSubs = await Promise.all(subs.map(async sub => {
-    try { await webpush.sendNotification(sub, payload); return sub }
-    catch (e: any) { const sc = e.statusCode || e.errors?.[0]?.statusCode; if (sc === 410 || sc === 404) return null; return sub }
-  }))
-  const kept = validSubs.filter(Boolean)
-  if (kept.length !== subs.length && db) {
-    const dbVal = kept.length > 0 ? JSON.stringify(kept) : null
-    try { await db.prepare('UPDATE notification_settings SET push_subscription = ? WHERE user_id = ?').bind(dbVal, subRow.user_id).run() } catch {}
-  }
+    const subs: any[] = []
+    try {
+      const parsed = JSON.parse(subRow.push_subscription)
+      if (Array.isArray(parsed)) subs.push(...parsed)
+      else subs.push(parsed)
+    } catch { return }
+    const validSubs = await Promise.all(subs.map(async sub => {
+      try { await webpush.sendNotification(sub, payload); return sub }
+      catch (e: any) { const sc = e.statusCode || e.errors?.[0]?.statusCode; if (sc === 410 || sc === 404) return null; return sub }
+    }))
+    const kept = validSubs.filter(Boolean)
+    if (kept.length !== subs.length && db) {
+      const dbVal = kept.length > 0 ? JSON.stringify(kept) : null
+      try { await db.prepare('UPDATE notification_settings SET push_subscription = ? WHERE user_id = ?').bind(dbVal, subRow.user_id).run() } catch {}
+    }
+  } catch {}
 }
 
 // プッシュ通知テスト送信（全ユーザーに送信）
 admin.post('/notifications/test', async (c) => {
-  const user = await getUser(c)
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  try {
+    const user = await getUser(c)
+    if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
-  if (!vapidPublicKey || !vapidPrivateKey) {
-    return c.json({ error: 'サーバーでVAPID鍵が設定されていません。管理者に連絡してください' })
-  }
-
-  const rows = await c.env.DB.prepare(
-    "SELECT user_id, push_subscription FROM notification_settings WHERE push_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
-  ).all<any>()
-
-  if (!rows.results?.length) {
-    return c.json({ error: 'プッシュ通知が有効なユーザーがいません' })
-  }
-
-  const payload = JSON.stringify({ title: 'テスト通知', body: 'プッシュ通知は正常に動作しています', type: 'normal' })
-  let sent = 0; let totalSubs = 0; let errors = 0
-
-  for (const row of rows.results) {
-    let subs: any[] = []
-    try { const p = JSON.parse(row.push_subscription); if (Array.isArray(p)) subs.push(...p); else subs.push(p) } catch { continue }
-    totalSubs += subs.length
-    const valid = await Promise.all(subs.map(async s => {
-      try { await webpush.sendNotification(s, payload); sent++; return s }
-      catch (e: any) { const sc = e.statusCode || e.errors?.[0]?.statusCode; if (sc === 410 || sc === 404) { errors++; return null } return s }
-    }))
-    const kept = valid.filter(Boolean)
-    if (kept.length !== subs.length) {
-      const val = kept.length > 0 ? JSON.stringify(kept) : null
-      await c.env.DB.prepare('UPDATE notification_settings SET push_subscription = ? WHERE user_id = ?').bind(val, row.user_id).catch(() => {})
+    if (!vapidPublicKey || !vapidPrivateKey) {
+      return c.json({ error: 'サーバーでVAPID鍵が設定されていません。管理者に連絡してください' })
     }
-  }
 
-  return c.json({ success: true, message: `${sent}台のデバイスに送信しました${errors > 0 ? `（${errors}台期限切れ）` : ''}` })
+    const rows = await c.env.DB.prepare(
+      "SELECT user_id, push_subscription FROM notification_settings WHERE push_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
+    ).all<any>()
+
+    if (!rows.results?.length) {
+      return c.json({ error: 'プッシュ通知が有効なユーザーがいません' })
+    }
+
+    const payload = JSON.stringify({ title: 'テスト通知', body: 'プッシュ通知は正常に動作しています', type: 'normal' })
+    let sent = 0; let totalSubs = 0; let errors = 0
+
+    for (const row of rows.results) {
+      let subs: any[] = []
+      try { const p = JSON.parse(row.push_subscription); if (Array.isArray(p)) subs.push(...p); else subs.push(p) } catch { continue }
+      totalSubs += subs.length
+      const valid = await Promise.all(subs.map(async s => {
+        try { await webpush.sendNotification(s, payload); sent++; return s }
+        catch (e: any) { const sc = e.statusCode || e.errors?.[0]?.statusCode; if (sc === 410 || sc === 404) { errors++; return null } return s }
+      }))
+      const kept = valid.filter(Boolean)
+      if (kept.length !== subs.length) {
+        const val = kept.length > 0 ? JSON.stringify(kept) : null
+        await c.env.DB.prepare('UPDATE notification_settings SET push_subscription = ? WHERE user_id = ?').bind(val, row.user_id).catch(() => {})
+      }
+    }
+
+    return c.json({ success: true, message: `${sent}台のデバイスに送信しました${errors > 0 ? `（${errors}台期限切れ）` : ''}` })
+  } catch (e: any) {
+    console.error('testPush error:', e)
+    return c.json({ error: e.message || e.toString() }, 500)
+  }
 })
 
 // 自分通知一覧
