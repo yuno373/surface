@@ -619,7 +619,7 @@ async function pushToSubs(subRow: any, payload: string, db?: any) {
   }
 }
 
-// プッシュ通知テスト送信
+// プッシュ通知テスト送信（全ユーザーに送信）
 admin.post('/notifications/test', async (c) => {
   const user = await getUser(c)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
@@ -628,56 +628,33 @@ admin.post('/notifications/test', async (c) => {
     return c.json({ error: 'サーバーでVAPID鍵が設定されていません。管理者に連絡してください' })
   }
 
-  const subRow = await c.env.DB.prepare(
-    "SELECT push_subscription FROM notification_settings WHERE user_id = ? AND push_subscription IS NOT NULL AND push_subscription != ''"
-  ).bind(user.id).first<any>()
-  if (!subRow || !subRow.push_subscription) {
-    return c.json({ error: '購読データがありません。設定→通知→プッシュ通知をオンにしてください' })
+  const rows = await c.env.DB.prepare(
+    "SELECT user_id, push_subscription FROM notification_settings WHERE push_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
+  ).all<any>()
+
+  if (!rows.results?.length) {
+    return c.json({ error: 'プッシュ通知が有効なユーザーがいません' })
   }
 
-  const subs: any[] = []
-  try {
-    const parsed = JSON.parse(subRow.push_subscription)
-    if (Array.isArray(parsed)) subs.push(...parsed)
-    else subs.push(parsed)
-  } catch {
-    return c.json({ error: '購読データが破損しています。設定→通知→プッシュ通知をオフ→オンにし直してください' })
-  }
+  const payload = JSON.stringify({ title: 'テスト通知', body: 'プッシュ通知は正常に動作しています', type: 'normal' })
+  let sent = 0; let totalSubs = 0; let errors = 0
 
-  if (!subs.length) {
-    return c.json({ error: '有効な購読デバイスがありません。プッシュ通知をオンにし直してください' })
-  }
-
-  // 410エラー：期限切れの購読を削除
-  const subsRemoved: number[] = []
-  const keepSubs: any[] = []
-  for (let i = 0; i < subs.length; i++) {
-    try {
-      await webpush.sendNotification(subs[i], JSON.stringify({ title: 'テスト通知', body: 'プッシュ通知は正常に動作しています', type: 'normal' }))
-      keepSubs.push(subs[i])
-    } catch (e: any) {
-      const sc = e.statusCode || (e.errors?.[0]?.statusCode) || null
-      if (sc === 410 || sc === 404) { subsRemoved.push(i); continue }
-      keepSubs.push(subs[i])
+  for (const row of rows.results) {
+    let subs: any[] = []
+    try { const p = JSON.parse(row.push_subscription); if (Array.isArray(p)) subs.push(...p); else subs.push(p) } catch { continue }
+    totalSubs += subs.length
+    const valid = await Promise.all(subs.map(async s => {
+      try { await webpush.sendNotification(s, payload); sent++; return s }
+      catch (e: any) { const sc = e.statusCode || e.errors?.[0]?.statusCode; if (sc === 410 || sc === 404) { errors++; return null } return s }
+    }))
+    const kept = valid.filter(Boolean)
+    if (kept.length !== subs.length) {
+      const val = kept.length > 0 ? JSON.stringify(kept) : null
+      await c.env.DB.prepare('UPDATE notification_settings SET push_subscription = ? WHERE user_id = ?').bind(val, row.user_id).catch(() => {})
     }
   }
 
-  if (subsRemoved.length > 0) {
-    const dbVal = keepSubs.length > 0 ? JSON.stringify(keepSubs) : null
-    await c.env.DB.prepare(
-      'UPDATE notification_settings SET push_subscription = ? WHERE user_id = ?'
-    ).bind(dbVal, user.id).run()
-  }
-
-  const updatedTotal = keepSubs.length
-  const removedCount = subsRemoved.length
-
-  if (updatedTotal > 0) {
-    const msg = `${updatedTotal}台のデバイスに送信しました${removedCount > 0 ? `（期限切れ${removedCount}台を削除）` : ''}`
-    return c.json({ success: true, message: msg })
-  }
-
-  return c.json({ error: 'プッシュ送信失敗: すべての購読が期限切れです。通知をオフ→オンにし直してください' })
+  return c.json({ success: true, message: `${sent}台のデバイスに送信しました${errors > 0 ? `（${errors}台期限切れ）` : ''}` })
 })
 
 // 自分通知一覧
