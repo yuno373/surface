@@ -219,6 +219,23 @@ app.get('/api/disaster/current', async (c) => {
 const SCALE_LABELS: Record<number, string> = {0:'0',1:'1',2:'2',3:'3',4:'4',45:'5弱',46:'5強',50:'5弱',55:'5強',60:'6弱',66:'6強',70:'6弱',77:'6強',80:'7'}
 let _eqCache: { data: any; time: number } | null = null
 let _lastEqId = ''
+// 地震プッシュ通知
+async function pushEarthquakeAlert(eq: any, db: any) {
+  try {
+    const rows = await db.prepare(
+      "SELECT push_subscription FROM notification_settings WHERE push_enabled = 1 AND push_subscription IS NOT NULL AND push_subscription != ''"
+    ).all<any>()
+    if (!rows.results?.length) return
+    const title = eq.isEew ? '🚨 緊急地震速報' : '📢 地震情報'
+    const body = eq.location + (eq.magnitude != null ? ' M' + eq.magnitude : '') + (eq.scaleLabel ? ' 震度' + eq.scaleLabel : '')
+    const payload = JSON.stringify({ title, body, type: 'disaster', url: '/' })
+    await Promise.allSettled(rows.results.map((r: any) => {
+      let subs: any[] = []
+      try { const p = JSON.parse(r.push_subscription); if (Array.isArray(p)) subs.push(...p); else subs.push(p) } catch { return }
+      return Promise.allSettled(subs.map(s => webpush.sendNotification(s, payload).catch(() => {})))
+    }))
+  } catch {}
+}
 // 地震情報マージ（複数ソース中最速のものを採用）
 type EqResult = { id:string; isEew:boolean; time:string; type:string; magnitude:number|null; depth:string; location:string; maxScale:number; scaleLabel:string; isNew:boolean; serious:boolean; irumaScale:number; irumaScaleLabel:string; tsunamiText:string }
 async function _eqRace(): Promise<EqResult|null> {
@@ -314,7 +331,7 @@ app.get('/api/earthquake/current', async (c) => {
   // 震度3以下は表示しない（EEWは除く）
   if (!result.isEew && result.maxScale > 0 && result.maxScale <= 30) return c.json({ eq: null })
   result.isNew = result.id !== _lastEqId
-  if (result.id !== _lastEqId) _lastEqId = result.id
+  if (result.id !== _lastEqId) { _lastEqId = result.id; pushEarthquakeAlert(result, c.env.DB).catch(() => {}) }
   _eqCache = { data: { eq: result }, time: Date.now() }
   return c.json({ eq: result })
 })
@@ -333,6 +350,7 @@ app.post('/api/earthquake/test', async (c) => {
   }
   _lastEqId = testEq.id
   _eqCache = { data: { eq: testEq }, time: Date.now() }
+  pushEarthquakeAlert(testEq, c.env.DB).catch(() => {})
   return c.json({ eq: testEq })
 })
 
@@ -580,7 +598,7 @@ const indexHtml = `<!DOCTYPE html>
 
 <div id="toast-container" class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none"></div>
 
-<script src="/static/app.js?v=24"></script>
+<script src="/static/app.js?v=25"></script>
 </body>
 </html>`
 

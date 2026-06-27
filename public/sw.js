@@ -97,7 +97,7 @@ self.addEventListener('push', (event) => {
 
   // 防災情報は緊急スタイル
   if (data.type === 'disaster') {
-    options.badge = '/icons/disaster-badge.png';
+    options.badge = '/icons/badge-72.png';
     options.renotify = true;
   }
 
