@@ -342,13 +342,10 @@ app.get('/api/earthquake/current', async (c) => {
   // 震度3以下は表示しない（EEWは除く）
   if (!result.isEew && result.maxScale > 0 && result.maxScale <= 30) return c.json({ eq: null })
   // 地震の発生時刻が1分以上前かつEEWでなければ古い地震として無視（サーバー再起動対策）
-  const isOld = !result.isEew && result.time && (() => {
-    const t = new Date(result.time.replace(/\//g, '-')).getTime()
-    return !isNaN(t) && Date.now() - t > 60000
-  })()
-  if (isOld) {
+  if (_lastEqId === '') {
+    // サーバー再起動直後: 初回はキャッシュのみ更新してスキップ（古い地震の再表示防止）
     _lastEqId = result.id
-    _eqCache = null
+    _eqCache = { data: { eq: result }, time: Date.now() }
     return c.json({ eq: null })
   }
   result.isNew = result.id !== _lastEqId
