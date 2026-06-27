@@ -472,6 +472,8 @@ auth.get('/notifications', async (c) => {
   const notifs = await c.env.DB.prepare(
     "SELECT * FROM notifications WHERE user_id = ? AND type != 'self' ORDER BY created_at DESC LIMIT 50"
   ).bind(session.user_id).all<any>()
+  // 通知タブを開いた瞬間に全て既読
+  await c.env.DB.prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0 AND (type IS NULL OR type != 'self')").bind(session.user_id).run().catch(() => {})
   return c.json({ notifications: notifs.results })
 })
 
