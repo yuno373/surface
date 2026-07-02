@@ -46,11 +46,16 @@ upload.post('/', async (c) => {
     customMetadata: { originalName: file.name, userId: String(user.id) }
   })
 
-  // DBに記録
   const publicUrl = `/api/upload/${r2Key}`
-  await c.env.DB.prepare(
-    'INSERT INTO files (user_id, filename, original_name, mime_type, size, r2_key) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(user.id, r2Key, file.name, file.type, file.size, r2Key).run()
+
+  // DBに記録（失敗してもアップロードは成功とみなす）
+  try {
+    await c.env.DB.prepare(
+      'INSERT INTO files (user_id, filename, original_name, mime_type, size, r2_key) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(user.id, r2Key, file.name, file.type, file.size, r2Key).run()
+  } catch (e) {
+    console.error('File DB insert failed:', e)
+  }
 
   return c.json({
     success: true,

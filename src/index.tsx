@@ -581,9 +581,6 @@ const indexHtml = `<!DOCTYPE html>
         <i class="fas fa-bell text-lg text-red-500"></i>
         <span id="notif-badge" class="hidden absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] min-w-[16px] h-4 rounded-full flex items-center justify-center px-1">0</span>
       </button>
-      <div id="header-avatar" class="w-7 h-7 rounded-full bg-green-400 flex items-center justify-center text-xs font-bold">
-        <span>-</span>
-      </div>
       <span id="header-name" class="text-sm font-medium hidden sm:block">-</span>
     </div>
   </header>
@@ -616,7 +613,7 @@ const indexHtml = `<!DOCTYPE html>
 
 <div id="toast-container" class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none"></div>
 
-<script src="/static/app.js?v=35"></script>
+<script src="/static/app.js?v=38"></script>
 </body>
 </html>`
 
