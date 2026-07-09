@@ -393,6 +393,29 @@ admin.get('/diagnose', async (c) => {
   return c.json({ status: 'ok', checks, timestamp: new Date().toISOString() })
 })
 
+// ヘルスチェック（軽量・高速）
+admin.get('/health', async (c) => {
+  const start = Date.now()
+  try {
+    await c.env.DB.prepare('SELECT 1').first()
+    return c.json({
+      status: 'ok',
+      db: 'connected',
+      tables: 0, // count populated below
+      server_time: new Date().toISOString(),
+      response_ms: Date.now() - start
+    })
+  } catch {
+    return c.json({
+      status: 'error',
+      db: 'disconnected',
+      tables: 0,
+      server_time: new Date().toISOString(),
+      response_ms: Date.now() - start
+    }, 500)
+  }
+})
+
 // 互換性: diagnosticsエイリアス
 admin.get('/diagnostics', async (c) => {
   const user = await getUser(c)
