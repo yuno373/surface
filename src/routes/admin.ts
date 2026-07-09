@@ -393,15 +393,20 @@ admin.get('/diagnose', async (c) => {
   return c.json({ status: 'ok', checks, timestamp: new Date().toISOString() })
 })
 
-// ヘルスチェック（軽量・高速）
+// ヘルスチェック（軽量・高速・認証不要）
 admin.get('/health', async (c) => {
   const start = Date.now()
   try {
     await c.env.DB.prepare('SELECT 1').first()
+    let showStatus = false
+    try {
+      const row = await c.env.DB.prepare("SELECT value FROM admin_settings WHERE key='show_system_status'").first<any>()
+      showStatus = row?.value === 'true'
+    } catch {}
     return c.json({
       status: 'ok',
       db: 'connected',
-      tables: 0, // count populated below
+      show_system_status: showStatus,
       server_time: new Date().toISOString(),
       response_ms: Date.now() - start
     })
@@ -409,7 +414,7 @@ admin.get('/health', async (c) => {
     return c.json({
       status: 'error',
       db: 'disconnected',
-      tables: 0,
+      show_system_status: false,
       server_time: new Date().toISOString(),
       response_ms: Date.now() - start
     }, 500)

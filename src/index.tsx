@@ -577,6 +577,7 @@ const indexHtml = `<!DOCTYPE html>
       </div>
     </div>
     <div class="flex items-center gap-2">
+      <span id="system-status-badge" class="hidden" style="display:none" title="システム状態確認中..."><span class="status-dot w-2 h-2 rounded-full bg-gray-400 inline-block"></span></span>
       <button onclick="navigateTo('notifications')" class="relative p-1.5 rounded-full bg-transparent border-none outline-none">
         <i class="fas fa-bell text-lg text-red-500"></i>
         <span id="notif-badge" class="hidden absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] min-w-[16px] h-4 rounded-full flex items-center justify-center px-1">0</span>
@@ -613,7 +614,7 @@ const indexHtml = `<!DOCTYPE html>
 
 <div id="toast-container" class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none"></div>
 
-<script src="/static/app.js?v=40"></script>
+<script src="/static/app.js?v=41"></script>
 </body>
 </html>`
 
